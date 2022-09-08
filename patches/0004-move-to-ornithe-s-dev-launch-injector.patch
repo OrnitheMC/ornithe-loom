@@ -1,0 +1,164 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Space Walker <spacedoesrs@gmail.com>
+Date: Fri, 9 Sep 2022 00:46:48 +0200
+Subject: [PATCH] move to ornithe's dev launch injector
+
+
+diff --git a/bootstrap/src/main/java/net/fabricmc/loom/bootstrap/LoomGradlePluginBootstrap.java b/bootstrap/src/main/java/net/fabricmc/loom/bootstrap/LoomGradlePluginBootstrap.java
+index 804f486b753249b41cc33e7b1d48260c73a91391..3f0ecaf618e34fdf65b2b985d86cdfb36b9eec84 100644
+--- a/bootstrap/src/main/java/net/fabricmc/loom/bootstrap/LoomGradlePluginBootstrap.java
++++ b/bootstrap/src/main/java/net/fabricmc/loom/bootstrap/LoomGradlePluginBootstrap.java
+@@ -26,7 +26,7 @@ public class LoomGradlePluginBootstrap implements Plugin<PluginAware> {
+ 		if (pluginAware instanceof Project) {
+ 			Project project = (Project) pluginAware;
+ 
+-			if (project.findProperty("fabric.loom.skip-env-validation") == null) {
++			if (project.findProperty("ornithe.loom.skip-env-validation") == null) {
+ 				validateEnvironment();
+ 			} else {
+ 				project.getLogger().lifecycle("Loom environment validation disabled. Please re-enable before reporting any issues.");
+diff --git a/build.gradle b/build.gradle
+index b8404e6f0349ec4ec7d1fe9096c9ec8ffa2ba42a..63c026bf01a95979d3b196c3b8f07be5005af4d6 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -202,8 +202,8 @@ test {
+ 	useJUnitPlatform()
+ 
+ 	// Forward system prop onto tests.
+-	if (System.getProperty("fabric.loom.test.homeDir")) {
+-		systemProperty "fabric.loom.test.homeDir", System.getProperty("fabric.loom.test.homeDir")
++	if (System.getProperty("ornithe.loom.test.homeDir")) {
++		systemProperty "ornithe.loom.test.homeDir", System.getProperty("ornithe.loom.test.homeDir")
+ 	}
+ }
+ 
+diff --git a/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java b/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
+index abcdb7f377f9266b0dca504005fc043bc145babc..7c1434651c975c53b647972096fa206bf0f2bbfc 100644
+--- a/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
++++ b/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
+@@ -126,10 +126,10 @@ public interface LoomGradleExtensionAPI {
+ 	void disableDeprecatedPomGeneration(MavenPublication publication);
+ 
+ 	/**
+-	 * Reads the mod version from the fabric.mod.json file located in the main sourcesets resources.
+-	 * This is useful if you want to set the gradle version based of the version in the fabric.mod.json file.
++	 * Reads the mod version from the ornithe.mod.json file located in the main sourcesets resources.
++	 * This is useful if you want to set the gradle version based of the version in the ornithe.mod.json file.
+ 	 *
+-	 * @return the version defined in the fabric.mod.json
++	 * @return the version defined in the ornithe.mod.json
+ 	 */
+ 	String getModVersion();
+ 
+diff --git a/src/main/java/net/fabricmc/loom/api/ModSettings.java b/src/main/java/net/fabricmc/loom/api/ModSettings.java
+index 45d246beb01782305eec416cb42c1496bf6b45a4..06917e1d823d8f523eea73320b1faba17715fad8 100644
+--- a/src/main/java/net/fabricmc/loom/api/ModSettings.java
++++ b/src/main/java/net/fabricmc/loom/api/ModSettings.java
+@@ -43,7 +43,7 @@ import net.fabricmc.loom.util.gradle.SourceSetReference;
+  */
+ public abstract class ModSettings implements Named {
+ 	/**
+-	 * List of classpath directories, or jar files used to populate the `fabric.classPathGroups` Fabric Loader system property.
++	 * List of classpath directories, or jar files used to populate the `ornithe.classPathGroups` Ornithe Loader system property.
+ 	 */
+ 	public abstract ConfigurableFileCollection getModFiles();
+ 
+@@ -96,7 +96,7 @@ public abstract class ModSettings implements Named {
+ 	}
+ 
+ 	/**
+-	 * List of classpath directories, used to populate the `fabric.classPathGroups` Fabric Loader system property.
++	 * List of classpath directories, used to populate the `ornithe.classPathGroups` Ornithe Loader system property.
+ 	 * Use the {@link ModSettings#sourceSet} methods to add to this.
+ 	 */
+ 	@ApiStatus.Internal
+diff --git a/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java b/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java
+index 49a6b1c12d71c1a7f2c235765a1cbcb3b23082e1..a9841c3c99acd2e3e3a4848449591253803817ec 100644
+--- a/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java
++++ b/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java
+@@ -55,8 +55,8 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
+ 		}
+ 
+ 		final LaunchConfig launchConfig = new LaunchConfig()
+-				.property("fabric.development", "true")
+-				.property("fabric.remapClasspathFile", getExtension().getFiles().getRemapClasspathFile().getAbsolutePath())
++				.property("ornithe.development", "true")
++				.property("ornithe.remapClasspathFile", getExtension().getFiles().getRemapClasspathFile().getAbsolutePath())
+ 				.property("log4j.configurationFile", getAllLog4JConfigFiles())
+ 				.property("log4j2.formatMsgNoLookups", "true")
+ 
+@@ -74,12 +74,12 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
+ 		}
+ 
+ 		if (getExtension().areEnvironmentSourceSetsSplit()) {
+-			launchConfig.property("client", "fabric.gameJarPath.client", getGameJarPath("client"));
+-			launchConfig.property("fabric.gameJarPath", getGameJarPath("common"));
++			launchConfig.property("client", "ornithe.gameJarPath.client", getGameJarPath("client"));
++			launchConfig.property("ornithe.gameJarPath", getGameJarPath("common"));
+ 		}
+ 
+ 		if (!getExtension().getMods().isEmpty()) {
+-			launchConfig.property("fabric.classPathGroups", getClassPathGroups());
++			launchConfig.property("ornithe.classPathGroups", getClassPathGroups());
+ 		}
+ 
+ 		final boolean plainConsole = getProject().getGradle().getStartParameter().getConsoleOutput() == ConsoleOutput.Plain;
+@@ -89,7 +89,7 @@ public abstract class GenerateDLIConfigTask extends AbstractLoomTask {
+ 
+ 		//Enable ansi by default for idea and vscode when gradle is not ran with plain console.
+ 		if (ansiSupportedIDE && !plainConsole) {
+-			launchConfig.property("fabric.log.disableAnsi", "false");
++			launchConfig.property("ornithe.log.disableAnsi", "false");
+ 		}
+ 
+ 		FileUtils.writeStringToFile(getExtension().getFiles().getDevLauncherConfig(), launchConfig.asString(), StandardCharsets.UTF_8);
+diff --git a/src/main/java/net/fabricmc/loom/task/launch/GenerateLog4jConfigTask.java b/src/main/java/net/fabricmc/loom/task/launch/GenerateLog4jConfigTask.java
+index fc249bbad90c9e937e79c4a7dd073cfbf0163d52..fad9cc361a31b399bd86506940f96c78cfb52fde 100644
+--- a/src/main/java/net/fabricmc/loom/task/launch/GenerateLog4jConfigTask.java
++++ b/src/main/java/net/fabricmc/loom/task/launch/GenerateLog4jConfigTask.java
+@@ -38,7 +38,7 @@ public abstract class GenerateLog4jConfigTask extends AbstractLoomTask {
+ 	public void run() {
+ 		Path outputFile = getExtension().getFiles().getDefaultLog4jConfigFile().toPath();
+ 
+-		try (InputStream is = GenerateLog4jConfigTask.class.getClassLoader().getResourceAsStream("log4j2.fabric.xml")) {
++		try (InputStream is = GenerateLog4jConfigTask.class.getClassLoader().getResourceAsStream("log4j2.ornithe.xml")) {
+ 			Files.deleteIfExists(outputFile);
+ 			Files.copy(is, outputFile);
+ 		} catch (IOException e) {
+diff --git a/src/main/java/net/fabricmc/loom/util/Constants.java b/src/main/java/net/fabricmc/loom/util/Constants.java
+index 202a49113b8e4282f2c675de46b5342ea82b4bdc..40426f5e770925f7c20afcdd765b7181363267f7 100644
+--- a/src/main/java/net/fabricmc/loom/util/Constants.java
++++ b/src/main/java/net/fabricmc/loom/util/Constants.java
+@@ -83,7 +83,7 @@ public class Constants {
+ 	 */
+ 	public static final class Dependencies {
+ 		public static final String MIXIN_COMPILE_EXTENSIONS = "net.fabricmc:fabric-mixin-compile-extensions:";
+-		public static final String DEV_LAUNCH_INJECTOR = "net.fabricmc:dev-launch-injector:";
++		public static final String DEV_LAUNCH_INJECTOR = "net.ornithemc:dev-launch-injector:";
+ 		public static final String TERMINAL_CONSOLE_APPENDER = "net.minecrell:terminalconsoleappender:";
+ 		public static final String JETBRAINS_ANNOTATIONS = "org.jetbrains:annotations:";
+ 		public static final String NATIVE_SUPPORT = "net.fabricmc:fabric-loom-native-support:";
+@@ -96,7 +96,7 @@ public class Constants {
+ 		 */
+ 		public static final class Versions {
+ 			public static final String MIXIN_COMPILE_EXTENSIONS = "0.5.0";
+-			public static final String DEV_LAUNCH_INJECTOR = "0.2.1+build.8";
++			public static final String DEV_LAUNCH_INJECTOR = "0.1.0";
+ 			public static final String TERMINAL_CONSOLE_APPENDER = "1.2.0";
+ 			public static final String JETBRAINS_ANNOTATIONS = "23.0.0";
+ 			public static final String NATIVE_SUPPORT_VERSION = "1.0.1";
+@@ -119,8 +119,8 @@ public class Constants {
+ 	}
+ 
+ 	public static final class Knot {
+-		public static final String KNOT_CLIENT = "net.fabricmc.loader.launch.knot.KnotClient";
+-		public static final String KNOT_SERVER = "net.fabricmc.loader.launch.knot.KnotServer";
++		public static final String KNOT_CLIENT = "net.ornithemc.loader.launch.knot.KnotClient";
++		public static final String KNOT_SERVER = "net.ornithemc.loader.launch.knot.KnotServer";
+ 
+ 		private Knot() {
+ 		}
+diff --git a/src/main/resources/log4j2.fabric.xml b/src/main/resources/log4j2.ornithe.xml
+similarity index 100%
+rename from src/main/resources/log4j2.fabric.xml
+rename to src/main/resources/log4j2.ornithe.xml
