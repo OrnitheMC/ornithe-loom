@@ -1,0 +1,9 @@
+plugins {
+    id 'net.minecraftforge.gitpatcher' version "0.10.+"
+}
+
+patches {
+    submodule = "fabric-loom"
+    target = file('ornithe-loom')
+    patches = file('patches')
+}

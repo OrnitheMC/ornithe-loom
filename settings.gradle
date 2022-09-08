@@ -1,0 +1,10 @@
+pluginManagement {
+    repositories {
+        maven {
+            url = "https://files.minecraftforge.net/maven"
+        }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+rootProject.name = 'ornithe-loom-parent'
