@@ -1,0 +1,1679 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Copetan <copetanbird@gmail.com>
+Date: Wed, 7 Sep 2022 23:40:43 -0700
+Subject: [PATCH] move to calamus as intermediate mapping layer
+
+
+diff --git a/src/main/java/net/fabricmc/loom/LoomGradleExtension.java b/src/main/java/net/fabricmc/loom/LoomGradleExtension.java
+index 72546cdb6255dbbd7dae478e6b0dd50616d7f9f7..045e27f9a9b4ca0ab733d5620c9a792bef74881a 100644
+--- a/src/main/java/net/fabricmc/loom/LoomGradleExtension.java
++++ b/src/main/java/net/fabricmc/loom/LoomGradleExtension.java
+@@ -42,7 +42,7 @@ import net.fabricmc.loom.configuration.accesswidener.AccessWidenerFile;
+ import net.fabricmc.loom.configuration.processors.JarProcessorManager;
+ import net.fabricmc.loom.configuration.providers.mappings.MappingsProviderImpl;
+ import net.fabricmc.loom.configuration.providers.minecraft.MinecraftProvider;
+-import net.fabricmc.loom.configuration.providers.minecraft.mapped.IntermediaryMinecraftProvider;
++import net.fabricmc.loom.configuration.providers.minecraft.mapped.CalamusMinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.mapped.NamedMinecraftProvider;
+ import net.fabricmc.loom.extension.LoomFiles;
+ import net.fabricmc.loom.extension.MixinExtension;
+@@ -83,16 +83,16 @@ public interface LoomGradleExtension extends LoomGradleExtensionAPI {
+ 
+ 	NamedMinecraftProvider<?> getNamedMinecraftProvider();
+ 
+-	IntermediaryMinecraftProvider<?> getIntermediaryMinecraftProvider();
++	CalamusMinecraftProvider<?> getCalamusMinecraftProvider();
+ 
+ 	void setNamedMinecraftProvider(NamedMinecraftProvider<?> namedMinecraftProvider);
+ 
+-	void setIntermediaryMinecraftProvider(IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider);
++	void setCalamusMinecraftProvider(CalamusMinecraftProvider<?> calamusMinecraftProvider);
+ 
+ 	default List<Path> getMinecraftJars(MappingsNamespace mappingsNamespace) {
+ 		return switch (mappingsNamespace) {
+ 		case NAMED -> getNamedMinecraftProvider().getMinecraftJars();
+-		case INTERMEDIARY -> getIntermediaryMinecraftProvider().getMinecraftJars();
++		case CALAMUS -> getCalamusMinecraftProvider().getMinecraftJars();
+ 		case OFFICIAL -> getMinecraftProvider().getMinecraftJars();
+ 		};
+ 	}
+diff --git a/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java b/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
+index 693f1d55b51965416208a8a27e07fdc391f0741f..abcdb7f377f9266b0dca504005fc043bc145babc 100644
+--- a/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
++++ b/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
+@@ -178,9 +178,9 @@ public interface LoomGradleExtensionAPI {
+ 	/**
+ 	 * Use "%1$s" as a placeholder for the minecraft version.
+ 	 *
+-	 * @return the intermediary url template
++	 * @return the calamus url template
+ 	 */
+-	Property<String> getIntermediaryUrl();
++	Property<String> getCalamusUrl();
+ 
+ 	Property<MinecraftJarConfiguration> getMinecraftJarConfiguration();
+ 
+diff --git a/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java b/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java
+index 594a74b8fad03e8dd1db706a86463d4d02072230..dd871134dd0cd9f83b6bed75f02930de216e99a4 100644
+--- a/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java
+@@ -45,7 +45,7 @@ public abstract class IntermediateMappingsProvider implements Named {
+ 	public abstract Property<Function<String, DownloadBuilder>> getDownloader();
+ 
+ 	/**
+-	 * Generate or download a tinyv2 mapping file with intermediary and named namespaces.
++	 * Generate or download a tinyv2 mapping file with calamus and named namespaces.
+ 	 * @throws IOException
+ 	 */
+ 	public abstract void provide(Path tinyMappings) throws IOException;
+diff --git a/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingContext.java b/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingContext.java
+index 6c5c0157df1a453e6732284794ef0952b8e137dc..40dd6cec7be38fc185b7d9be99af091f5acb654f 100644
+--- a/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingContext.java
++++ b/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingContext.java
+@@ -41,7 +41,7 @@ public interface MappingContext {
+ 
+ 	Path resolveMavenDependency(String mavenNotation);
+ 
+-	Supplier<MemoryMappingTree> intermediaryTree();
++	Supplier<MemoryMappingTree> calamusTree();
+ 
+ 	MinecraftProvider minecraftProvider();
+ 
+diff --git a/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingsNamespace.java b/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingsNamespace.java
+index 4e3a628ad20c9a6a774bc5914f71a2177466f0a3..e42dabcdaa07e6dd0d672bdf443bde15bed48acd 100644
+--- a/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingsNamespace.java
++++ b/src/main/java/net/fabricmc/loom/api/mappings/layered/MappingsNamespace.java
+@@ -38,13 +38,13 @@ public enum MappingsNamespace {
+ 	OFFICIAL,
+ 
+ 	/**
+-	 * Intermediary mappings have been generated to provide a stable set of names across minecraft versions.
++	 * Calamus mappings have been generated to provide a stable set of names across minecraft versions.
+ 	 *
+-	 * <p>Intermediary is used in a production runtime (outside a dev env) allowing mods to run across multiple versions of the game. Mods are remapped from "named" at build time.
++	 * <p>Calamus is used in a production runtime (outside a dev env) allowing mods to run across multiple versions of the game. Mods are remapped from "named" at build time.
+ 	 *
+-	 * @see <a href="https://github.com/FabricMC/intermediary/">github.com/FabricMC/intermediary/</a>
++	 * @see <a href="https://github.com/OrnitheMC/calamus/">github.com/OrnitheMC/calamus/</a>
+ 	 */
+-	INTERMEDIARY,
++	CALAMUS,
+ 
+ 	/**
+ 	 * Named mappings are the developer friendly names used to develop mods against.
+@@ -60,7 +60,7 @@ public enum MappingsNamespace {
+ 	public static @Nullable MappingsNamespace of(String namespace) {
+ 		return switch (namespace) {
+ 		case "official" -> OFFICIAL;
+-		case "intermediary" -> INTERMEDIARY;
++		case "calamus" -> CALAMUS;
+ 		case "named" -> NAMED;
+ 		default -> null;
+ 		};
+diff --git a/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/FileMappingsSpecBuilder.java b/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/FileMappingsSpecBuilder.java
+index 8028881ac71d8ee73d4e505673f49fe625e70984..1e290b9211e2d6655d319fa4b1798c5e44eaf0ec 100644
+--- a/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/FileMappingsSpecBuilder.java
++++ b/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/FileMappingsSpecBuilder.java
+@@ -54,7 +54,7 @@ public interface FileMappingsSpecBuilder {
+ 	 * if the mapping format itself doesn't provide namespaces with names
+ 	 * (e.g. Enigma mappings).
+ 	 *
+-	 * <p>The default fallback namespaces are {@code intermediary} as the source namespace
++	 * <p>The default fallback namespaces are {@code calamus} as the source namespace
+ 	 * and {@code named} as the target namespace as in Yarn.
+ 	 *
+ 	 * @param sourceNamespace the fallback source namespace
+@@ -83,9 +83,9 @@ public interface FileMappingsSpecBuilder {
+ 	 *
+ 	 * <p>The merge namespace is the namespace that is used to match up this layer's
+ 	 * names to the rest of the mappings. For example, Yarn mappings should be merged through
+-	 * the intermediary names.
++	 * the calamus names.
+ 	 *
+-	 * <p>The default merge namespace is {@link MappingsNamespace#INTERMEDIARY}.
++	 * <p>The default merge namespace is {@link MappingsNamespace#CALAMUS}.
+ 	 *
+ 	 * @param namespace the new merge namespace
+ 	 * @return this builder
+@@ -97,9 +97,9 @@ public interface FileMappingsSpecBuilder {
+ 	 *
+ 	 * <p>The merge namespace is the namespace that is used to match up this layer's
+ 	 * names to the rest of the mappings. For example, Yarn mappings should be merged through
+-	 * the intermediary names.
++	 * the calamus names.
+ 	 *
+-	 * <p>The default merge namespace is {@code intermediary}.
++	 * <p>The default merge namespace is {@code calamus}.
+ 	 *
+ 	 * @param namespace the new merge namespace
+ 	 * @return this builder
+diff --git a/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/MojangMappingsSpecBuilder.java b/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/MojangMappingsSpecBuilder.java
+index 1db0ff021fde56ca45d824dc8af35e315ce6c385..b2e3b665a06b4e7b4d2f02f61823768731d69983 100644
+--- a/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/MojangMappingsSpecBuilder.java
++++ b/src/main/java/net/fabricmc/loom/api/mappings/layered/spec/MojangMappingsSpecBuilder.java
+@@ -28,7 +28,7 @@ public interface MojangMappingsSpecBuilder {
+ 	/**
+ 	 * When enabled synthetic fields and methods will be mapped to name specified in the official mojang mappings.
+ 	 *
+-	 * <p>When disabled synthetic fields and methods will not be mapped leaving them with their intermediary name.
++	 * <p>When disabled synthetic fields and methods will not be mapped leaving them with their calamus name.
+ 	 */
+ 	MojangMappingsSpecBuilder setNameSyntheticMembers(boolean value);
+ 
+diff --git a/src/main/java/net/fabricmc/loom/build/mixin/AnnotationProcessorInvoker.java b/src/main/java/net/fabricmc/loom/build/mixin/AnnotationProcessorInvoker.java
+index 0a79dab80f9e25eda54d70769ad0a8950db6cac4..3a0a34220c32b6d554d70644d4c1cc6248ffce9c 100644
+--- a/src/main/java/net/fabricmc/loom/build/mixin/AnnotationProcessorInvoker.java
++++ b/src/main/java/net/fabricmc/loom/build/mixin/AnnotationProcessorInvoker.java
+@@ -93,8 +93,8 @@ public abstract class AnnotationProcessorInvoker<T extends Task> {
+ 			LoomGradleExtension loom = LoomGradleExtension.get(project);
+ 			String refmapName = Objects.requireNonNull(MixinExtension.getMixinInformationContainer(sourceSet)).refmapNameProvider().get();
+ 			Map<String, String> args = new HashMap<>() {{
+-					put(Constants.MixinArguments.IN_MAP_FILE_NAMED_INTERMEDIARY, loom.getMappingsProvider().tinyMappings.toFile().getCanonicalPath());
+-					put(Constants.MixinArguments.OUT_MAP_FILE_NAMED_INTERMEDIARY, MixinMappingsService.getMixinMappingFile(project, sourceSet).getCanonicalPath());
++					put(Constants.MixinArguments.IN_MAP_FILE_NAMED_CALAMUS, loom.getMappingsProvider().tinyMappings.toFile().getCanonicalPath());
++					put(Constants.MixinArguments.OUT_MAP_FILE_NAMED_CALAMUS, MixinMappingsService.getMixinMappingFile(project, sourceSet).getCanonicalPath());
+ 					put(Constants.MixinArguments.OUT_REFMAP_FILE, getRefmapDestination(task, refmapName));
+ 					put(Constants.MixinArguments.DEFAULT_OBFUSCATION_ENV, "named:" + loom.getMixin().getRefmapTargetNamespace().get());
+ 					put(Constants.MixinArguments.QUIET, "true");
+diff --git a/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java b/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
+index e54194cd79915c28457d787b153fc5958d09e288..06816f3e2eb3da9255f7047ee59b2d680897bf2b 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
++++ b/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
+@@ -55,7 +55,7 @@ import net.fabricmc.loom.configuration.providers.mappings.MappingsProviderImpl;
+ import net.fabricmc.loom.configuration.providers.minecraft.MinecraftJarConfiguration;
+ import net.fabricmc.loom.configuration.providers.minecraft.MinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.MinecraftSourceSets;
+-import net.fabricmc.loom.configuration.providers.minecraft.mapped.IntermediaryMinecraftProvider;
++import net.fabricmc.loom.configuration.providers.minecraft.mapped.CalamusMinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.mapped.NamedMinecraftProvider;
+ import net.fabricmc.loom.extension.MixinExtension;
+ import net.fabricmc.loom.util.Checksum;
+@@ -193,7 +193,7 @@ public final class CompileConfiguration {
+ 		mappingsProvider.applyToProject(project, mappingsDep);
+ 
+ 		// Provide the remapped mc jars
+-		final IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider = jarConfiguration.getIntermediaryMinecraftProviderBiFunction().apply(project, minecraftProvider);
++		final CalamusMinecraftProvider<?> calamusMinecraftProvider = jarConfiguration.getCalamusMinecraftProviderBiFunction().apply(project, minecraftProvider);
+ 		NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.getNamedMinecraftProviderBiFunction().apply(project, minecraftProvider);
+ 
+ 		final JarProcessorManager jarProcessorManager = createJarProcessorManager(project);
+@@ -203,8 +203,8 @@ public final class CompileConfiguration {
+ 			namedMinecraftProvider = jarConfiguration.getProcessedNamedMinecraftProviderBiFunction().apply(namedMinecraftProvider, jarProcessorManager);
+ 		}
+ 
+-		extension.setIntermediaryMinecraftProvider(intermediaryMinecraftProvider);
+-		intermediaryMinecraftProvider.provide(true);
++		extension.setCalamusMinecraftProvider(calamusMinecraftProvider);
++		calamusMinecraftProvider.provide(true);
+ 
+ 		extension.setNamedMinecraftProvider(namedMinecraftProvider);
+ 		namedMinecraftProvider.provide(true);
+diff --git a/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerJarProcessor.java b/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerJarProcessor.java
+index e1b23ea3b1ec479eec117f1bb439a48212b1a727..e1f8f6113bc15b7020701a97e3020ea976cea712 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerJarProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerJarProcessor.java
+@@ -65,7 +65,7 @@ public class AccessWidenerJarProcessor implements JarProcessor {
+ 		LoomGradleExtension extension = LoomGradleExtension.get(project);
+ 		Path awPath = extension.getAccessWidenerPath().get().getAsFile().toPath();
+ 
+-		// Read our own mod's access widener, used later for producing a version remapped to intermediary
++		// Read our own mod's access widener, used later for producing a version remapped to calamus
+ 		try {
+ 			modAccessWidener = Files.readAllBytes(awPath);
+ 		} catch (NoSuchFileException e) {
+diff --git a/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerJarProcessor.java b/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerJarProcessor.java
+index 707158383f046e9bfa81b7b37affa5e9e09025ac..cbe08f8ee16a770e24f3475e5ec2cfd90810425a 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerJarProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerJarProcessor.java
+@@ -141,14 +141,14 @@ public class TransitiveAccessWidenerJarProcessor implements JarProcessor {
+ 
+ 	private AccessWidener createAccessWidener() {
+ 		AccessWidener accessWidener = new AccessWidener();
+-		// For other mods, only consider transitive AWs and remap from intermediary->named
++		// For other mods, only consider transitive AWs and remap from calamus->named
+ 		TinyRemapper tinyRemapper = createTinyRemapper();
+ 
+ 		try {
+ 			AccessWidenerRemapper remappingVisitor = new AccessWidenerRemapper(
+ 					accessWidener,
+ 					tinyRemapper.getEnvironment().getRemapper(),
+-					MappingsNamespace.INTERMEDIARY.toString(),
++					MappingsNamespace.CALAMUS.toString(),
+ 					MappingsNamespace.NAMED.toString()
+ 			);
+ 			AccessWidenerReader transitiveReader = new AccessWidenerReader(new TransitiveOnlyFilter(remappingVisitor));
+@@ -166,17 +166,17 @@ public class TransitiveAccessWidenerJarProcessor implements JarProcessor {
+ 
+ 	private TinyRemapper createTinyRemapper() {
+ 		try {
+-			TinyRemapper tinyRemapper = TinyRemapperHelper.getTinyRemapper(project, "intermediary", "named");
++			TinyRemapper tinyRemapper = TinyRemapperHelper.getTinyRemapper(project, "calamus", "named");
+ 
+ 			tinyRemapper.readClassPath(TinyRemapperHelper.getMinecraftDependencies(project));
+ 
+-			for (Path minecraftJar : extension.getMinecraftJars(MappingsNamespace.INTERMEDIARY)) {
++			for (Path minecraftJar : extension.getMinecraftJars(MappingsNamespace.CALAMUS)) {
+ 				tinyRemapper.readClassPath(minecraftJar);
+ 			}
+ 
+ 			return tinyRemapper;
+ 		} catch (IOException e) {
+-			throw new RuntimeException("Failed to create tiny remapper for intermediary->named", e);
++			throw new RuntimeException("Failed to create tiny remapper for calamus->named", e);
+ 		}
+ 	}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerMappingsProcessor.java b/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerMappingsProcessor.java
+index da82d8f1d3fd02c6197a15e765765390217cab90..2de08db76cf209c47c2e5e433ad51f4e3042e459 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerMappingsProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/accesswidener/TransitiveAccessWidenerMappingsProcessor.java
+@@ -48,8 +48,8 @@ public record TransitiveAccessWidenerMappingsProcessor(Project project) implemen
+ 			return false;
+ 		}
+ 
+-		if (!MappingsNamespace.INTERMEDIARY.toString().equals(mappings.getSrcNamespace())) {
+-			throw new IllegalStateException("Mapping tree must have intermediary src mappings not " + mappings.getSrcNamespace());
++		if (!MappingsNamespace.CALAMUS.toString().equals(mappings.getSrcNamespace())) {
++			throw new IllegalStateException("Mapping tree must have calamus src mappings not " + mappings.getSrcNamespace());
+ 		}
+ 
+ 		for (AccessWidenerFile accessWidener : accessWideners) {
+diff --git a/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java b/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
+index 033211390944bb090942ed7d8f167bacb244e158..da192b332b633d5f92d85e4816e4ab28cd9c7277 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
+@@ -108,7 +108,7 @@ public class InterfaceInjectionProcessor implements JarProcessor, GenerateSource
+ 
+ 	@Override
+ 	public void process(File jarFile) {
+-		// Lazily remap from intermediary->named
++		// Lazily remap from calamus->named
+ 		if (remappedInjectedInterfaces == null) {
+ 			TinyRemapper tinyRemapper = createTinyRemapper();
+ 			Remapper remapper = tinyRemapper.getEnvironment().getRemapper();
+@@ -228,8 +228,8 @@ public class InterfaceInjectionProcessor implements JarProcessor, GenerateSource
+ 			return false;
+ 		}
+ 
+-		if (!MappingsNamespace.INTERMEDIARY.toString().equals(mappings.getSrcNamespace())) {
+-			throw new IllegalStateException("Mapping tree must have intermediary src mappings not " + mappings.getSrcNamespace());
++		if (!MappingsNamespace.CALAMUS.toString().equals(mappings.getSrcNamespace())) {
++			throw new IllegalStateException("Mapping tree must have calamus src mappings not " + mappings.getSrcNamespace());
+ 		}
+ 
+ 		for (Map.Entry<String, List<InjectedInterface>> entry : injectedInterfaces.entrySet()) {
+@@ -347,16 +347,16 @@ public class InterfaceInjectionProcessor implements JarProcessor, GenerateSource
+ 
+ 	private TinyRemapper createTinyRemapper() {
+ 		try {
+-			TinyRemapper tinyRemapper = TinyRemapperHelper.getTinyRemapper(project, "intermediary", "named");
++			TinyRemapper tinyRemapper = TinyRemapperHelper.getTinyRemapper(project, "calamus", "named");
+ 			tinyRemapper.readClassPath(TinyRemapperHelper.getMinecraftDependencies(project));
+ 
+-			for (Path minecraftJar : extension.getMinecraftJars(MappingsNamespace.INTERMEDIARY)) {
++			for (Path minecraftJar : extension.getMinecraftJars(MappingsNamespace.CALAMUS)) {
+ 				tinyRemapper.readClassPath(minecraftJar);
+ 			}
+ 
+ 			return tinyRemapper;
+ 		} catch (IOException e) {
+-			throw new RuntimeException("Failed to create tiny remapper for intermediary->named", e);
++			throw new RuntimeException("Failed to create tiny remapper for calamus->named", e);
+ 		}
+ 	}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java b/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
+index 3f463919bddc185f2567ac00f5a3df888ed3f148..39fb4d61df5fb74ce0cb916cd686566d66f1fef5 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
++++ b/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
+@@ -40,7 +40,7 @@ import net.fabricmc.loom.util.ZipUtils;
+ 
+ public class AccessWidenerUtils {
+ 	/**
+-	 * Remap a mods access widener from intermediary to named, so that loader can apply it in our dev-env.
++	 * Remap a mods access widener from calamus to named, so that loader can apply it in our dev-env.
+ 	 */
+ 	public static byte[] remapAccessWidener(byte[] input, Remapper remapper) {
+ 		int version = AccessWidenerReader.readVersion(input);
+@@ -49,7 +49,7 @@ public class AccessWidenerUtils {
+ 		AccessWidenerRemapper awRemapper = new AccessWidenerRemapper(
+ 				writer,
+ 				remapper,
+-				MappingsNamespace.INTERMEDIARY.toString(),
++				MappingsNamespace.CALAMUS.toString(),
+ 				MappingsNamespace.NAMED.toString()
+ 		);
+ 		AccessWidenerReader reader = new AccessWidenerReader(awRemapper);
+diff --git a/src/main/java/net/fabricmc/loom/configuration/mods/ModConfigurationRemapper.java b/src/main/java/net/fabricmc/loom/configuration/mods/ModConfigurationRemapper.java
+index 3f9f8bceb89b80709bd72eab4af0df5aa3a9bdb1..682ee24666a1fb34de1891de07367037958bcc48 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/mods/ModConfigurationRemapper.java
++++ b/src/main/java/net/fabricmc/loom/configuration/mods/ModConfigurationRemapper.java
+@@ -71,7 +71,7 @@ public class ModConfigurationRemapper {
+ 		for (RemapConfigurationSettings entry : extension.getRemapConfigurations()) {
+ 			entry.getRemappedConfiguration().configure(remappedConfig -> {
+ 				/*
+-				sourceConfig - The source configuration where the intermediary named artifacts come from. i.e "modApi"
++				sourceConfig - The source configuration where the calamus named artifacts come from. i.e "modApi"
+ 				remappedConfig - an intermediate configuration where the remapped artifacts go
+ 				targetConfig - extends from the remappedConfig, such as "api"
+ 				 */
+diff --git a/src/main/java/net/fabricmc/loom/configuration/mods/ModProcessor.java b/src/main/java/net/fabricmc/loom/configuration/mods/ModProcessor.java
+index a5998ff8cb7c47ccfc2bd8b697771f85855896e7..bdda13e57248cf06358873d3dea225a7ed656191 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/mods/ModProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/mods/ModProcessor.java
+@@ -59,7 +59,7 @@ import net.fabricmc.tinyremapper.OutputConsumerPath;
+ import net.fabricmc.tinyremapper.TinyRemapper;
+ 
+ public class ModProcessor {
+-	private static final String fromM = MappingsNamespace.INTERMEDIARY.toString();
++	private static final String fromM = MappingsNamespace.CALAMUS.toString();
+ 	private static final String toM = MappingsNamespace.NAMED.toString();
+ 
+ 	private final Project project;
+@@ -111,7 +111,7 @@ public class ModProcessor {
+ 
+ 		final TinyRemapper remapper = builder.build();
+ 
+-		for (Path minecraftJar : extension.getMinecraftJars(MappingsNamespace.INTERMEDIARY)) {
++		for (Path minecraftJar : extension.getMinecraftJars(MappingsNamespace.CALAMUS)) {
+ 			remapper.readClassPathAsync(minecraftJar);
+ 		}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
+index b06447fe6660f3664a2febcdde0897840e15df33..100d8be779b35c8326f3589383c16530be96f0bf 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
+@@ -142,8 +142,8 @@ public final class ModJavadocProcessor implements JarProcessor, GenerateSourcesT
+ 				MappingReader.read(reader, mappings);
+ 			}
+ 
+-			if (!mappings.getSrcNamespace().equals(MappingsNamespace.INTERMEDIARY.toString())) {
+-				throw new IllegalStateException("Javadoc provided by mod (%s) must be have an intermediary source namespace".formatted(modId));
++			if (!mappings.getSrcNamespace().equals(MappingsNamespace.CALAMUS.toString())) {
++				throw new IllegalStateException("Javadoc provided by mod (%s) must be have an calamus source namespace".formatted(modId));
+ 			}
+ 
+ 			if (!mappings.getDstNamespaces().isEmpty()) {
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediaryMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
+similarity index 78%
+rename from src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediaryMappingsProvider.java
+rename to src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
+index d7aeb51f2f38458f5969f928684a448c057007fc..d5f5e431a5b194326e3a4aa74a00d6e087381b4b 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediaryMappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
+@@ -36,10 +36,10 @@ import org.slf4j.LoggerFactory;
+ 
+ import net.fabricmc.loom.api.mappings.intermediate.IntermediateMappingsProvider;
+ 
+-public abstract class IntermediaryMappingsProvider extends IntermediateMappingsProvider {
++public abstract class CalamusMappingsProvider extends IntermediateMappingsProvider {
+ 	private static final Logger LOGGER = LoggerFactory.getLogger(IntermediateMappingsProvider.class);
+ 
+-	public abstract Property<String> getIntermediaryUrl();
++	public abstract Property<String> getCalamusUrl();
+ 
+ 	public abstract Property<Boolean> getRefreshDeps();
+ 
+@@ -49,25 +49,25 @@ public abstract class IntermediaryMappingsProvider extends IntermediateMappingsP
+ 			return;
+ 		}
+ 
+-		// Download and extract intermediary
+-		final Path intermediaryJarPath = Files.createTempFile(getName(), ".jar");
++		// Download and extract calamus
++		final Path calamusJarPath = Files.createTempFile(getName(), ".jar");
+ 		final String encodedMcVersion = UrlEscapers.urlFragmentEscaper().escape(getMinecraftVersion().get());
+-		final String url = getIntermediaryUrl().get().formatted(encodedMcVersion);
++		final String url = getCalamusUrl().get().formatted(encodedMcVersion);
+ 
+-		LOGGER.info("Downloading intermediary from {}", url);
++		LOGGER.info("Downloading calamus from {}", url);
+ 
+ 		Files.deleteIfExists(tinyMappings);
+-		Files.deleteIfExists(intermediaryJarPath);
++		Files.deleteIfExists(calamusJarPath);
+ 
+ 		getDownloader().get().apply(url)
+ 				.defaultCache()
+-				.downloadPath(intermediaryJarPath);
++				.downloadPath(calamusJarPath);
+ 
+-		MappingsProviderImpl.extractMappings(intermediaryJarPath, tinyMappings);
++		MappingsProviderImpl.extractMappings(calamusJarPath, tinyMappings);
+ 	}
+ 
+ 	@Override
+ 	public @NotNull String getName() {
+-		return "intermediary-v2";
++		return "calamus-v2";
+ 	}
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/GradleMappingContext.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/GradleMappingContext.java
+index fdbd27d0428375c6381912401fb53eb96a4a72fa..eca424e671e5066f30a4e5aba2e34492fe3a9a5f 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/GradleMappingContext.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/GradleMappingContext.java
+@@ -65,7 +65,7 @@ public class GradleMappingContext implements MappingContext {
+ 	}
+ 
+ 	@Override
+-	public Supplier<MemoryMappingTree> intermediaryTree() {
++	public Supplier<MemoryMappingTree> calamusTree() {
+ 		return () -> IntermediateMappingsService.getInstance(project, minecraftProvider()).getMemoryMappingTree();
+ 	}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java
+index 13b1427cc6ccbddb612b88afd9372a1f8b784f0d..fa46c0f54da5a24111515e0b09be23a2d6a93349 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java
+@@ -49,11 +49,11 @@ import net.fabricmc.mappingio.format.Tiny2Reader;
+ import net.fabricmc.mappingio.tree.MemoryMappingTree;
+ 
+ public final class IntermediateMappingsService implements SharedService {
+-	private final Path intermediaryTiny;
++	private final Path calamusTiny;
+ 	private final Supplier<MemoryMappingTree> memoryMappingTree = Suppliers.memoize(this::createMemoryMappingTree);
+ 
+-	private IntermediateMappingsService(Path intermediaryTiny) {
+-		this.intermediaryTiny = intermediaryTiny;
++	private IntermediateMappingsService(Path calamusTiny) {
++		this.calamusTiny = calamusTiny;
+ 	}
+ 
+ 	public static synchronized IntermediateMappingsService getInstance(Project project, MinecraftProvider minecraftProvider) {
+@@ -66,13 +66,13 @@ public final class IntermediateMappingsService implements SharedService {
+ 
+ 	@VisibleForTesting
+ 	public static IntermediateMappingsService create(IntermediateMappingsProvider intermediateMappingsProvider, MinecraftProvider minecraftProvider) {
+-		final Path intermediaryTiny = minecraftProvider.file(intermediateMappingsProvider.getName() + ".tiny").toPath();
++		final Path calamusTiny = minecraftProvider.file(intermediateMappingsProvider.getName() + ".tiny").toPath();
+ 
+ 		try {
+-			intermediateMappingsProvider.provide(intermediaryTiny);
++			intermediateMappingsProvider.provide(calamusTiny);
+ 		} catch (IOException e) {
+ 			try {
+-				Files.deleteIfExists(intermediaryTiny);
++				Files.deleteIfExists(calamusTiny);
+ 			} catch (IOException ex) {
+ 				ex.printStackTrace();
+ 			}
+@@ -80,20 +80,20 @@ public final class IntermediateMappingsService implements SharedService {
+ 			throw new UncheckedIOException("Failed to provide intermediate mappings", e);
+ 		}
+ 
+-		return new IntermediateMappingsService(intermediaryTiny);
++		return new IntermediateMappingsService(calamusTiny);
+ 	}
+ 
+ 	private MemoryMappingTree createMemoryMappingTree() {
+ 		final MemoryMappingTree tree = new MemoryMappingTree();
+ 
+ 		try {
+-			MappingNsCompleter nsCompleter = new MappingNsCompleter(tree, Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()), true);
++			MappingNsCompleter nsCompleter = new MappingNsCompleter(tree, Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.CALAMUS.toString()), true);
+ 
+-			try (BufferedReader reader = Files.newBufferedReader(getIntermediaryTiny(), StandardCharsets.UTF_8)) {
++			try (BufferedReader reader = Files.newBufferedReader(getCalamusTiny(), StandardCharsets.UTF_8)) {
+ 				Tiny2Reader.read(reader, nsCompleter);
+ 			}
+ 		} catch (IOException e) {
+-			throw new UncheckedIOException("Failed to read intermediary mappings", e);
++			throw new UncheckedIOException("Failed to read calamus mappings", e);
+ 		}
+ 
+ 		return tree;
+@@ -103,7 +103,7 @@ public final class IntermediateMappingsService implements SharedService {
+ 		return memoryMappingTree.get();
+ 	}
+ 
+-	public Path getIntermediaryTiny() {
+-		return Objects.requireNonNull(intermediaryTiny, "Intermediary mappings have not been setup");
++	public Path getCalamusTiny() {
++		return Objects.requireNonNull(calamusTiny, "Calamus mappings have not been setup");
+ 	}
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingSpecBuilderImpl.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingSpecBuilderImpl.java
+index 26dd21b910a8789d817ff4048aa0a0d5740f6327..9f4241173885d0ba34cdaa2f22aa53ef60bd1761 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingSpecBuilderImpl.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingSpecBuilderImpl.java
+@@ -36,9 +36,9 @@ import net.fabricmc.loom.api.mappings.layered.spec.LayeredMappingSpecBuilder;
+ import net.fabricmc.loom.api.mappings.layered.spec.MappingsSpec;
+ import net.fabricmc.loom.api.mappings.layered.spec.MojangMappingsSpecBuilder;
+ import net.fabricmc.loom.api.mappings.layered.spec.ParchmentMappingsSpecBuilder;
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec;
+ import net.fabricmc.loom.configuration.providers.mappings.extras.signatures.SignatureFixesSpec;
+ import net.fabricmc.loom.configuration.providers.mappings.file.FileMappingsSpecBuilderImpl;
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec;
+ import net.fabricmc.loom.configuration.providers.mappings.mojmap.MojangMappingsSpecBuilderImpl;
+ import net.fabricmc.loom.configuration.providers.mappings.parchment.ParchmentMappingsSpecBuilderImpl;
+ 
+@@ -79,8 +79,8 @@ public class LayeredMappingSpecBuilderImpl implements LayeredMappingSpecBuilder
+ 
+ 	public LayeredMappingSpec build() {
+ 		List<MappingsSpec<?>> builtLayers = new LinkedList<>();
+-		// Intermediary is always the base layer
+-		builtLayers.add(new IntermediaryMappingsSpec());
++		// Calamus is always the base layer
++		builtLayers.add(new CalamusMappingsSpec());
+ 		builtLayers.addAll(layers);
+ 
+ 		return new LayeredMappingSpec(Collections.unmodifiableList(builtLayers));
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingsDependency.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingsDependency.java
+index 0b3be679c39d6a6886e613b045696eef25e610a8..efe3e17aab5fc3b7c5c8dcff13e41b7fb67947b6 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingsDependency.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/LayeredMappingsDependency.java
+@@ -101,7 +101,7 @@ public class LayeredMappingsDependency implements SelfResolvingDependency, FileC
+ 			Tiny2Writer tiny2Writer = new Tiny2Writer(writer, false);
+ 
+ 			MappingDstNsReorder nsReorder = new MappingDstNsReorder(tiny2Writer, Collections.singletonList(MappingsNamespace.NAMED.toString()));
+-			MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(nsReorder, MappingsNamespace.INTERMEDIARY.toString(), true);
++			MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(nsReorder, MappingsNamespace.CALAMUS.toString(), true);
+ 			mappings.accept(nsSwitch);
+ 
+ 			Files.deleteIfExists(mappingsFile);
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
+index 18b8ee89fb80db28b6afd01441ba2ac15ad298c3..cd451415af326969b7b09ac73aa2e70070263fbe 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
+@@ -30,5 +30,5 @@ import java.nio.file.Path;
+ public interface MappingsProvider {
+ 	Path mappingsWorkingDir();
+ 
+-	File intermediaryTinyFile();
++	File calamusTinyFile();
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
+index c780a8cc63ced2e7dba8704104e7a0b5a069e727..f5ae9be6944b9d11bbab30f084ab6880971fdb2b 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
+@@ -84,9 +84,9 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 	private UnpickMetadata unpickMetadata;
+ 	private Map<String, String> signatureFixes;
+ 
+-	private final Supplier<IntermediateMappingsService> intermediaryService;
++	private final Supplier<IntermediateMappingsService> calamusService;
+ 
+-	private MappingsProviderImpl(String mappingsIdentifier, Path mappingsWorkingDir, Supplier<IntermediateMappingsService> intermediaryService) {
++	private MappingsProviderImpl(String mappingsIdentifier, Path mappingsWorkingDir, Supplier<IntermediateMappingsService> calamusService) {
+ 		this.mappingsIdentifier = mappingsIdentifier;
+ 
+ 		this.mappingsWorkingDir = mappingsWorkingDir;
+@@ -95,13 +95,13 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		this.tinyMappingsJar = mappingsWorkingDir.resolve("mappings.jar");
+ 		this.unpickDefinitions = mappingsWorkingDir.resolve("mappings.unpick");
+ 
+-		this.intermediaryService = intermediaryService;
++		this.calamusService = calamusService;
+ 	}
+ 
+ 	public static synchronized MappingsProviderImpl getInstance(Project project, DependencyInfo dependency, MinecraftProvider minecraftProvider) {
+ 		return SharedServiceManager.get(project).getOrCreateService("MappingsProvider:%s:%s".formatted(dependency.getDepString(), minecraftProvider.minecraftVersion()), () -> {
+-			Supplier<IntermediateMappingsService> intermediaryService = Suppliers.memoize(() -> IntermediateMappingsService.getInstance(project, minecraftProvider));
+-			return create(dependency, minecraftProvider, intermediaryService);
++			Supplier<IntermediateMappingsService> calamusService = Suppliers.memoize(() -> IntermediateMappingsService.getInstance(project, minecraftProvider));
++			return create(dependency, minecraftProvider, calamusService);
+ 		});
+ 	}
+ 
+@@ -109,7 +109,7 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		return Objects.requireNonNull(mappingTree, "Cannot get mappings before they have been read").get();
+ 	}
+ 
+-	private static MappingsProviderImpl create(DependencyInfo dependency, MinecraftProvider minecraftProvider, Supplier<IntermediateMappingsService> intermediaryService) {
++	private static MappingsProviderImpl create(DependencyInfo dependency, MinecraftProvider minecraftProvider, Supplier<IntermediateMappingsService> calamusService) {
+ 		final String version = dependency.getResolvedVersion();
+ 		final Path inputJar = dependency.resolveFile().orElseThrow(() -> new RuntimeException("Could not resolve mappings: " + dependency)).toPath();
+ 		final String mappingsName = StringUtils.removeSuffix(dependency.getDependency().getGroup() + "." + dependency.getDependency().getName(), "-unmerged");
+@@ -124,7 +124,7 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		final String mappingsIdentifier = createMappingsIdentifier(mappingsName, version, getMappingsClassifier(dependency, jarInfo.v2()), minecraftProvider.minecraftVersion());
+ 		final Path workingDir = minecraftProvider.dir(mappingsIdentifier).toPath();
+ 
+-		var mappingProvider = new MappingsProviderImpl(mappingsIdentifier, workingDir, intermediaryService);
++		var mappingProvider = new MappingsProviderImpl(mappingsIdentifier, workingDir, calamusService);
+ 
+ 		try {
+ 			mappingProvider.setup(minecraftProvider, inputJar);
+@@ -192,7 +192,7 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 
+ 		if (areMappingsV2(baseTinyMappings)) {
+ 			// These are unmerged v2 mappings
+-			MappingsMerger.mergeAndSaveMappings(baseTinyMappings, tinyMappings, intermediaryService.get());
++			MappingsMerger.mergeAndSaveMappings(baseTinyMappings, tinyMappings, calamusService.get());
+ 		} else {
+ 			final List<Path> minecraftJars = minecraftProvider.getMinecraftJars();
+ 
+@@ -332,8 +332,8 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 	}
+ 
+ 	@Override
+-	public File intermediaryTinyFile() {
+-		return intermediaryService.get().getIntermediaryTiny().toFile();
++	public File calamusTinyFile() {
++		return calamusService.get().getCalamusTiny().toFile();
+ 	}
+ 
+ 	private static String createMappingsIdentifier(String mappingsName, String version, String classifier, String minecraftVersion) {
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
+index 28ddfc637875241412f847fd9acdc87c79e32e0c..6e21742f2ad6f865152dcf24e74515458d6a5b1d 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
+@@ -34,10 +34,10 @@ import org.jetbrains.annotations.NotNull;
+ import net.fabricmc.loom.api.mappings.intermediate.IntermediateMappingsProvider;
+ 
+ /**
+- * A bit of a hack, creates an empty intermediary mapping file to be used for mc versions without any intermediate mappings.
++ * A bit of a hack, creates an empty calamus mapping file to be used for mc versions without any intermediate mappings.
+  */
+ public abstract class NoOpIntermediateMappingsProvider extends IntermediateMappingsProvider {
+-	private static final String HEADER = "tiny\t2\t0\tofficial\tintermediary";
++	private static final String HEADER = "tiny\t2\t0\tofficial\tcalamus";
+ 
+ 	@Override
+ 	public void provide(Path tinyMappings) throws IOException {
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/intermediary/IntermediaryMappingLayer.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/calamus/CalamusMappingLayer.java
+similarity index 86%
+rename from src/main/java/net/fabricmc/loom/configuration/providers/mappings/intermediary/IntermediaryMappingLayer.java
+rename to src/main/java/net/fabricmc/loom/configuration/providers/mappings/calamus/CalamusMappingLayer.java
+index cfd0ee32eae1904dbfe169f8e1da602e3eb7871b..ea5293aba9278e71713abad2e8440075c571455e 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/intermediary/IntermediaryMappingLayer.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/calamus/CalamusMappingLayer.java
+@@ -22,7 +22,7 @@
+  * SOFTWARE.
+  */
+ 
+-package net.fabricmc.loom.configuration.providers.mappings.intermediary;
++package net.fabricmc.loom.configuration.providers.mappings.calamus;
+ 
+ import java.io.IOException;
+ import java.util.Collections;
+@@ -34,7 +34,7 @@ import net.fabricmc.mappingio.MappingVisitor;
+ import net.fabricmc.mappingio.adapter.MappingNsCompleter;
+ import net.fabricmc.mappingio.tree.MemoryMappingTree;
+ 
+-public record IntermediaryMappingLayer(Supplier<MemoryMappingTree> memoryMappingTree) implements MappingLayer {
++public record CalamusMappingLayer(Supplier<MemoryMappingTree> memoryMappingTree) implements MappingLayer {
+ 	@Override
+ 	public MappingsNamespace getSourceNamespace() {
+ 		return MappingsNamespace.OFFICIAL;
+@@ -42,8 +42,8 @@ public record IntermediaryMappingLayer(Supplier<MemoryMappingTree> memoryMapping
+ 
+ 	@Override
+ 	public void visit(MappingVisitor mappingVisitor) throws IOException {
+-		// Populate named with intermediary and add Add a "named" namespace
+-		MappingNsCompleter nsCompleter = new MappingNsCompleter(mappingVisitor, Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.INTERMEDIARY.toString()), true);
++		// Populate named with calamus and add Add a "named" namespace
++		MappingNsCompleter nsCompleter = new MappingNsCompleter(mappingVisitor, Collections.singletonMap(MappingsNamespace.NAMED.toString(), MappingsNamespace.CALAMUS.toString()), true);
+ 
+ 		memoryMappingTree.get().accept(nsCompleter);
+ 	}
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/intermediary/IntermediaryMappingsSpec.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/calamus/CalamusMappingsSpec.java
+similarity index 81%
+rename from src/main/java/net/fabricmc/loom/configuration/providers/mappings/intermediary/IntermediaryMappingsSpec.java
+rename to src/main/java/net/fabricmc/loom/configuration/providers/mappings/calamus/CalamusMappingsSpec.java
+index 0b1344747519df6b3d9ad8d56466d49fd34c501d..96ca8b6c5442f98c1f8e3ecfd861c056a44da944 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/intermediary/IntermediaryMappingsSpec.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/calamus/CalamusMappingsSpec.java
+@@ -22,14 +22,14 @@
+  * SOFTWARE.
+  */
+ 
+-package net.fabricmc.loom.configuration.providers.mappings.intermediary;
++package net.fabricmc.loom.configuration.providers.mappings.calamus;
+ 
+ import net.fabricmc.loom.api.mappings.layered.MappingContext;
+ import net.fabricmc.loom.api.mappings.layered.spec.MappingsSpec;
+ 
+-public record IntermediaryMappingsSpec() implements MappingsSpec<IntermediaryMappingLayer> {
++public record CalamusMappingsSpec() implements MappingsSpec<CalamusMappingLayer> {
+ 	@Override
+-	public IntermediaryMappingLayer createLayer(MappingContext context) {
+-		return new IntermediaryMappingLayer(context.intermediaryTree());
++	public CalamusMappingLayer createLayer(MappingContext context) {
++		return new CalamusMappingLayer(context.calamusTree());
+ 	}
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsLayer.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsLayer.java
+index 06b79461bc975834c4fe38177620af6dcb2280e0..89b9270e7513ed3e8a1b1fb3b83cd1d45a570fc9 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsLayer.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsLayer.java
+@@ -34,8 +34,8 @@ import org.jetbrains.annotations.Nullable;
+ 
+ import net.fabricmc.loom.api.mappings.layered.MappingLayer;
+ import net.fabricmc.loom.api.mappings.layered.MappingsNamespace;
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingLayer;
+ import net.fabricmc.loom.configuration.providers.mappings.extras.unpick.UnpickLayer;
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingLayer;
+ import net.fabricmc.loom.util.FileSystemUtil;
+ import net.fabricmc.loom.util.ZipUtils;
+ import net.fabricmc.mappingio.MappingReader;
+@@ -88,7 +88,7 @@ public record FileMappingsLayer(
+ 
+ 	@Override
+ 	public List<Class<? extends MappingLayer>> dependsOn() {
+-		return List.of(IntermediaryMappingLayer.class);
++		return List.of(CalamusMappingLayer.class);
+ 	}
+ 
+ 	@Override
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsSpecBuilderImpl.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsSpecBuilderImpl.java
+index 441d51203b4d99cfe534cc11aaf6b3936191ec9d..b4617b25c7bfb8ba7c8813c00e7493104e9af6c9 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsSpecBuilderImpl.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/file/FileMappingsSpecBuilderImpl.java
+@@ -38,11 +38,11 @@ public class FileMappingsSpecBuilderImpl implements FileMappingsSpecBuilder {
+ 
+ 	private final FileSpec fileSpec;
+ 	private String mappingPath = DEFAULT_MAPPING_PATH;
+-	private String fallbackSourceNamespace = MappingsNamespace.INTERMEDIARY.toString();
++	private String fallbackSourceNamespace = MappingsNamespace.CALAMUS.toString();
+ 	private String fallbackTargetNamespace = MappingsNamespace.NAMED.toString();
+ 	private boolean enigma = false;
+ 	private boolean unpick = false;
+-	private String mergeNamespace = MappingsNamespace.INTERMEDIARY.toString();
++	private String mergeNamespace = MappingsNamespace.CALAMUS.toString();
+ 
+ 	private FileMappingsSpecBuilderImpl(FileSpec fileSpec) {
+ 		this.fileSpec = fileSpec;
+@@ -88,7 +88,7 @@ public class FileMappingsSpecBuilderImpl implements FileMappingsSpecBuilder {
+ 		Objects.requireNonNull(namespace, "merge namespace cannot be null");
+ 
+ 		if (MappingsNamespace.of(namespace) == null) {
+-			throw new IllegalArgumentException("Namespace '" + namespace + "' is unsupported! It must be either 'official', 'intermediary' or 'named'.");
++			throw new IllegalArgumentException("Namespace '" + namespace + "' is unsupported! It must be either 'official', 'calamus' or 'named'.");
+ 		}
+ 
+ 		mergeNamespace = namespace;
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/mojmap/MojangMappingLayer.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/mojmap/MojangMappingLayer.java
+index 580c39dcc9c76f8679ecd500fed26a1562355c34..92c5bc71d064d45732f35c09542833156f340a9f 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/mojmap/MojangMappingLayer.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/mojmap/MojangMappingLayer.java
+@@ -36,7 +36,7 @@ import org.gradle.api.logging.Logger;
+ 
+ import net.fabricmc.loom.api.mappings.layered.MappingLayer;
+ import net.fabricmc.loom.api.mappings.layered.MappingsNamespace;
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingLayer;
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingLayer;
+ import net.fabricmc.loom.configuration.providers.mappings.utils.DstNameFilterMappingVisitor;
+ import net.fabricmc.mappingio.MappingVisitor;
+ import net.fabricmc.mappingio.adapter.MappingSourceNsSwitch;
+@@ -88,6 +88,6 @@ public record MojangMappingLayer(Path clientMappings, Path serverMappings, boole
+ 
+ 	@Override
+ 	public List<Class<? extends MappingLayer>> dependsOn() {
+-		return List.of(IntermediaryMappingLayer.class);
++		return List.of(CalamusMappingLayer.class);
+ 	}
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/tiny/MappingsMerger.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/tiny/MappingsMerger.java
+index 5988f143d4df30c6f1df225552b35ae420ef97f9..1d62c33ca516b8aa580f677d1e30d4a1b43bbdc5 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/tiny/MappingsMerger.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/tiny/MappingsMerger.java
+@@ -53,17 +53,17 @@ public final class MappingsMerger {
+ 		Stopwatch stopwatch = Stopwatch.createStarted();
+ 		LOGGER.info(":merging mappings");
+ 
+-		MemoryMappingTree intermediaryTree = new MemoryMappingTree();
+-		intermediateMappingsService.getMemoryMappingTree().accept(new MappingSourceNsSwitch(intermediaryTree, MappingsNamespace.INTERMEDIARY.toString()));
++		MemoryMappingTree calamusTree = new MemoryMappingTree();
++		intermediateMappingsService.getMemoryMappingTree().accept(new MappingSourceNsSwitch(calamusTree, MappingsNamespace.CALAMUS.toString()));
+ 
+ 		try (BufferedReader reader = Files.newBufferedReader(from, StandardCharsets.UTF_8)) {
+-			Tiny2Reader.read(reader, intermediaryTree);
++			Tiny2Reader.read(reader, calamusTree);
+ 		}
+ 
+ 		MemoryMappingTree officialTree = new MemoryMappingTree();
+-		MappingNsCompleter nsCompleter = new MappingNsCompleter(officialTree, Map.of(MappingsNamespace.OFFICIAL.toString(), MappingsNamespace.INTERMEDIARY.toString()));
++		MappingNsCompleter nsCompleter = new MappingNsCompleter(officialTree, Map.of(MappingsNamespace.OFFICIAL.toString(), MappingsNamespace.CALAMUS.toString()));
+ 		MappingSourceNsSwitch nsSwitch = new MappingSourceNsSwitch(nsCompleter, MappingsNamespace.OFFICIAL.toString());
+-		intermediaryTree.accept(nsSwitch);
++		calamusTree.accept(nsSwitch);
+ 
+ 		inheritMappedNamesOfEnclosingClasses(officialTree);
+ 
+@@ -79,23 +79,23 @@ public final class MappingsMerger {
+ 	 * Currently, Yarn does not export mappings for these inner classes.
+ 	 */
+ 	private static void inheritMappedNamesOfEnclosingClasses(MemoryMappingTree tree) {
+-		int intermediaryIdx = tree.getNamespaceId("intermediary");
++		int calamusIdx = tree.getNamespaceId("calamus");
+ 		int namedIdx = tree.getNamespaceId("named");
+ 
+-		// The tree does not have an index by intermediary names by default
++		// The tree does not have an index by calamus names by default
+ 		tree.setIndexByDstNames(true);
+ 
+ 		for (MappingTree.ClassMapping classEntry : tree.getClasses()) {
+-			String intermediaryName = classEntry.getDstName(intermediaryIdx);
++			String calamusName = classEntry.getDstName(calamusIdx);
+ 			String namedName = classEntry.getDstName(namedIdx);
+ 
+-			if (intermediaryName.equals(namedName) && intermediaryName.contains("$")) {
+-				String[] path = intermediaryName.split(Pattern.quote("$"));
++			if (calamusName.equals(namedName) && calamusName.contains("$")) {
++				String[] path = calamusName.split(Pattern.quote("$"));
+ 				int parts = path.length;
+ 
+ 				for (int i = parts - 2; i >= 0; i--) {
+ 					String currentPath = String.join("$", Arrays.copyOfRange(path, 0, i + 1));
+-					String namedParentClass = tree.mapClassName(currentPath, intermediaryIdx, namedIdx);
++					String namedParentClass = tree.mapClassName(currentPath, calamusIdx, namedIdx);
+ 
+ 					if (!namedParentClass.equals(currentPath)) {
+ 						classEntry.setDstName(namedParentClass
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftJarConfiguration.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftJarConfiguration.java
+index 48a4ca9cf0be251c00f3328b615303ff6dfe44cc..8ae8348d4ef84db508a6c2723286397d83d5ab8b 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftJarConfiguration.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftJarConfiguration.java
+@@ -34,7 +34,7 @@ import net.fabricmc.loom.configuration.decompile.DecompileConfiguration;
+ import net.fabricmc.loom.configuration.decompile.SingleJarDecompileConfiguration;
+ import net.fabricmc.loom.configuration.decompile.SplitDecompileConfiguration;
+ import net.fabricmc.loom.configuration.processors.JarProcessorManager;
+-import net.fabricmc.loom.configuration.providers.minecraft.mapped.IntermediaryMinecraftProvider;
++import net.fabricmc.loom.configuration.providers.minecraft.mapped.CalamusMinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.mapped.MappedMinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.mapped.NamedMinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.mapped.ProcessedNamedMinecraftProvider;
+@@ -42,7 +42,7 @@ import net.fabricmc.loom.configuration.providers.minecraft.mapped.ProcessedNamed
+ public enum MinecraftJarConfiguration {
+ 	MERGED(
+ 		MergedMinecraftProvider::new,
+-		IntermediaryMinecraftProvider.MergedImpl::new,
++		CalamusMinecraftProvider.MergedImpl::new,
+ 		NamedMinecraftProvider.MergedImpl::new,
+ 		ProcessedNamedMinecraftProvider.MergedImpl::new,
+ 		SingleJarDecompileConfiguration::new,
+@@ -50,7 +50,7 @@ public enum MinecraftJarConfiguration {
+ 	),
+ 	SERVER_ONLY(
+ 		SingleJarMinecraftProvider::server,
+-		IntermediaryMinecraftProvider.SingleJarImpl::server,
++		CalamusMinecraftProvider.SingleJarImpl::server,
+ 		NamedMinecraftProvider.SingleJarImpl::server,
+ 		ProcessedNamedMinecraftProvider.SingleJarImpl::server,
+ 		SingleJarDecompileConfiguration::new,
+@@ -58,7 +58,7 @@ public enum MinecraftJarConfiguration {
+ 	),
+ 	CLIENT_ONLY(
+ 		SingleJarMinecraftProvider::client,
+-		IntermediaryMinecraftProvider.SingleJarImpl::client,
++		CalamusMinecraftProvider.SingleJarImpl::client,
+ 		NamedMinecraftProvider.SingleJarImpl::client,
+ 		ProcessedNamedMinecraftProvider.SingleJarImpl::client,
+ 		SingleJarDecompileConfiguration::new,
+@@ -66,7 +66,7 @@ public enum MinecraftJarConfiguration {
+ 	),
+ 	SPLIT(
+ 		SplitMinecraftProvider::new,
+-		IntermediaryMinecraftProvider.SplitImpl::new,
++		CalamusMinecraftProvider.SplitImpl::new,
+ 		NamedMinecraftProvider.SplitImpl::new,
+ 		ProcessedNamedMinecraftProvider.SplitImpl::new,
+ 		SplitDecompileConfiguration::new,
+@@ -74,7 +74,7 @@ public enum MinecraftJarConfiguration {
+ 	);
+ 
+ 	private final Function<Project, MinecraftProvider> minecraftProviderFunction;
+-	private final BiFunction<Project, MinecraftProvider, IntermediaryMinecraftProvider<?>> intermediaryMinecraftProviderBiFunction;
++	private final BiFunction<Project, MinecraftProvider, CalamusMinecraftProvider<?>> calamusMinecraftProviderBiFunction;
+ 	private final BiFunction<Project, MinecraftProvider, NamedMinecraftProvider<?>> namedMinecraftProviderBiFunction;
+ 	private final BiFunction<NamedMinecraftProvider<?>, JarProcessorManager, ProcessedNamedMinecraftProvider<?, ?>> processedNamedMinecraftProviderBiFunction;
+ 	private final BiFunction<Project, MappedMinecraftProvider, DecompileConfiguration<?>> decompileConfigurationBiFunction;
+@@ -83,14 +83,14 @@ public enum MinecraftJarConfiguration {
+ 	@SuppressWarnings("unchecked") // Just a bit of a generic mess :)
+ 	<M extends MinecraftProvider, P extends NamedMinecraftProvider<M>, Q extends MappedMinecraftProvider> MinecraftJarConfiguration(
+ 			Function<Project, M> minecraftProviderFunction,
+-			BiFunction<Project, M, IntermediaryMinecraftProvider<M>> intermediaryMinecraftProviderBiFunction,
++			BiFunction<Project, M, CalamusMinecraftProvider<M>> calamusMinecraftProviderBiFunction,
+ 			BiFunction<Project, M, P> namedMinecraftProviderBiFunction,
+ 			BiFunction<P, JarProcessorManager, ProcessedNamedMinecraftProvider<M, P>> processedNamedMinecraftProviderBiFunction,
+ 			BiFunction<Project, Q, DecompileConfiguration<?>> decompileConfigurationBiFunction,
+ 			List<String> supportedEnvironments
+ 	) {
+ 		this.minecraftProviderFunction = (Function<Project, MinecraftProvider>) minecraftProviderFunction;
+-		this.intermediaryMinecraftProviderBiFunction = (BiFunction<Project, MinecraftProvider, IntermediaryMinecraftProvider<?>>) (Object) intermediaryMinecraftProviderBiFunction;
++		this.calamusMinecraftProviderBiFunction = (BiFunction<Project, MinecraftProvider, CalamusMinecraftProvider<?>>) (Object) calamusMinecraftProviderBiFunction;
+ 		this.namedMinecraftProviderBiFunction = (BiFunction<Project, MinecraftProvider, NamedMinecraftProvider<?>>) namedMinecraftProviderBiFunction;
+ 		this.processedNamedMinecraftProviderBiFunction = (BiFunction<NamedMinecraftProvider<?>, JarProcessorManager, ProcessedNamedMinecraftProvider<?, ?>>) (Object) processedNamedMinecraftProviderBiFunction;
+ 		this.decompileConfigurationBiFunction = (BiFunction<Project, MappedMinecraftProvider, DecompileConfiguration<?>>) decompileConfigurationBiFunction;
+@@ -101,8 +101,8 @@ public enum MinecraftJarConfiguration {
+ 		return minecraftProviderFunction;
+ 	}
+ 
+-	public BiFunction<Project, MinecraftProvider, IntermediaryMinecraftProvider<?>> getIntermediaryMinecraftProviderBiFunction() {
+-		return intermediaryMinecraftProviderBiFunction;
++	public BiFunction<Project, MinecraftProvider, CalamusMinecraftProvider<?>> getCalamusMinecraftProviderBiFunction() {
++		return calamusMinecraftProviderBiFunction;
+ 	}
+ 
+ 	public BiFunction<Project, MinecraftProvider, NamedMinecraftProvider<?>> getNamedMinecraftProviderBiFunction() {
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/SignatureFixerApplyVisitor.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/SignatureFixerApplyVisitor.java
+index 0ebff3467f061b62e328eb4cc339533fb2e4caad..0fab7b1ea899edbfc1c4aaaa90aaf43535bbf435 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/SignatureFixerApplyVisitor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/SignatureFixerApplyVisitor.java
+@@ -62,13 +62,13 @@ public record SignatureFixerApplyVisitor(Map<String, String> signatureFixes) imp
+ 		}
+ 
+ 		if (toIntermediary) {
+-			// No need to remap, as these are already intermediary
++			// No need to remap, as these are already calamus
+ 			return mappingsProvider.getSignatureFixes();
+ 		}
+ 
+-		// Remap the sig fixes from intermediary to the target namespace
++		// Remap the sig fixes from calamus to the target namespace
+ 		final Map<String, String> remapped = new HashMap<>();
+-		final TinyRemapper sigTinyRemapper = TinyRemapperHelper.getTinyRemapper(project, MappingsNamespace.INTERMEDIARY.toString(), targetNamespace);
++		final TinyRemapper sigTinyRemapper = TinyRemapperHelper.getTinyRemapper(project, MappingsNamespace.CALAMUS.toString(), targetNamespace);
+ 		final Remapper sigAsmRemapper = sigTinyRemapper.getEnvironment().getRemapper();
+ 
+ 		// Remap the class names and the signatures using a new tiny remapper instance.
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
+index d74b8c876bf50fb4e778e013c2dc3b42e6874d73..eed9df341fb2d7bf3ae13503ef881abde2647864 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
+@@ -130,7 +130,7 @@ public abstract class AbstractMappedMinecraftProvider<M extends MinecraftProvide
+ 
+ 		Files.deleteIfExists(remappedJars.outputJar());
+ 
+-		final Map<String, String> remappedSignatures = SignatureFixerApplyVisitor.getRemappedSignatures(getTargetNamespace() == MappingsNamespace.INTERMEDIARY, mappingsProvider, project, toM);
++		final Map<String, String> remappedSignatures = SignatureFixerApplyVisitor.getRemappedSignatures(getTargetNamespace() == MappingsNamespace.CALAMUS, mappingsProvider, project, toM);
+ 		TinyRemapper remapper = TinyRemapperHelper.getTinyRemapper(project, fromM, toM, true, (builder) -> {
+ 			builder.extraPostApplyVisitor(new SignatureFixerApplyVisitor(remappedSignatures));
+ 			configureRemapper(remappedJars, builder);
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/IntermediaryMinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/CalamusMinecraftProvider.java
+similarity index 83%
+rename from src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/IntermediaryMinecraftProvider.java
+rename to src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/CalamusMinecraftProvider.java
+index b6a56ee4a3a4a99ef965e75a9d3a615ce79aaaa6..0c80b04b95ba3b1f81624eec537992d1db19b804 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/IntermediaryMinecraftProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/CalamusMinecraftProvider.java
+@@ -37,8 +37,8 @@ import net.fabricmc.loom.configuration.providers.minecraft.SplitMinecraftProvide
+ import net.fabricmc.loom.util.SidedClassVisitor;
+ import net.fabricmc.tinyremapper.TinyRemapper;
+ 
+-public abstract sealed class IntermediaryMinecraftProvider<M extends MinecraftProvider> extends AbstractMappedMinecraftProvider<M> permits IntermediaryMinecraftProvider.MergedImpl, IntermediaryMinecraftProvider.SingleJarImpl, IntermediaryMinecraftProvider.SplitImpl {
+-	public IntermediaryMinecraftProvider(Project project, M minecraftProvider) {
++public abstract sealed class CalamusMinecraftProvider<M extends MinecraftProvider> extends AbstractMappedMinecraftProvider<M> permits CalamusMinecraftProvider.MergedImpl, CalamusMinecraftProvider.SingleJarImpl, CalamusMinecraftProvider.SplitImpl {
++	public CalamusMinecraftProvider(Project project, M minecraftProvider) {
+ 		super(project, minecraftProvider);
+ 	}
+ 
+@@ -49,10 +49,10 @@ public abstract sealed class IntermediaryMinecraftProvider<M extends MinecraftPr
+ 
+ 	@Override
+ 	public final MappingsNamespace getTargetNamespace() {
+-		return MappingsNamespace.INTERMEDIARY;
++		return MappingsNamespace.CALAMUS;
+ 	}
+ 
+-	public static final class MergedImpl extends IntermediaryMinecraftProvider<MergedMinecraftProvider> implements Merged {
++	public static final class MergedImpl extends CalamusMinecraftProvider<MergedMinecraftProvider> implements Merged {
+ 		public MergedImpl(Project project, MergedMinecraftProvider minecraftProvider) {
+ 			super(project, minecraftProvider);
+ 		}
+@@ -65,7 +65,7 @@ public abstract sealed class IntermediaryMinecraftProvider<M extends MinecraftPr
+ 		}
+ 	}
+ 
+-	public static final class SplitImpl extends IntermediaryMinecraftProvider<SplitMinecraftProvider> implements Split {
++	public static final class SplitImpl extends CalamusMinecraftProvider<SplitMinecraftProvider> implements Split {
+ 		public SplitImpl(Project project, SplitMinecraftProvider minecraftProvider) {
+ 			super(project, minecraftProvider);
+ 		}
+@@ -86,7 +86,7 @@ public abstract sealed class IntermediaryMinecraftProvider<M extends MinecraftPr
+ 		}
+ 	}
+ 
+-	public static final class SingleJarImpl extends IntermediaryMinecraftProvider<SingleJarMinecraftProvider> implements SingleJar {
++	public static final class SingleJarImpl extends CalamusMinecraftProvider<SingleJarMinecraftProvider> implements SingleJar {
+ 		private final String env;
+ 
+ 		private SingleJarImpl(Project project, SingleJarMinecraftProvider minecraftProvider, String env) {
+diff --git a/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionApiImpl.java b/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionApiImpl.java
+index abfc70bdc6b7ab6e99a4bb4b2b5df173f660b2d2..967c53f697022be9929922cf8591e80df491f748 100644
+--- a/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionApiImpl.java
++++ b/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionApiImpl.java
+@@ -71,7 +71,7 @@ public abstract class LoomGradleExtensionApiImpl implements LoomGradleExtensionA
+ 	protected final Property<String> customManifest;
+ 	protected final Property<Boolean> transitiveAccessWideners;
+ 	protected final Property<Boolean> modProvidedJavadoc;
+-	protected final Property<String> intermediary;
++	protected final Property<String> calamus;
+ 	protected final Property<IntermediateMappingsProvider> intermediateMappingsProvider;
+ 	private final Property<Boolean> runtimeOnlyLog4j;
+ 	private final Property<Boolean> splitModDependencies;
+@@ -101,8 +101,8 @@ public abstract class LoomGradleExtensionApiImpl implements LoomGradleExtensionA
+ 		this.modProvidedJavadoc = project.getObjects().property(Boolean.class)
+ 				.convention(true);
+ 		this.modProvidedJavadoc.finalizeValueOnRead();
+-		this.intermediary = project.getObjects().property(String.class)
+-				.convention("https://maven.fabricmc.net/net/fabricmc/intermediary/%1$s/intermediary-%1$s-v2.jar");
++		this.calamus = project.getObjects().property(String.class)
++				.convention("https://maven.ornithemc.net/releases/net/ornithemc/calamus/%1$s/calamus-%1$s-v2.jar");
+ 
+ 		this.intermediateMappingsProvider = project.getObjects().property(IntermediateMappingsProvider.class);
+ 		this.intermediateMappingsProvider.finalizeValueOnRead();
+@@ -235,8 +235,8 @@ public abstract class LoomGradleExtensionApiImpl implements LoomGradleExtensionA
+ 	protected abstract LoomFiles getFiles();
+ 
+ 	@Override
+-	public Property<String> getIntermediaryUrl() {
+-		return intermediary;
++	public Property<String> getCalamusUrl() {
++		return calamus;
+ 	}
+ 
+ 	@Override
+diff --git a/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionImpl.java b/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionImpl.java
+index a81a6d29c59ad19e182f592d0cb75492168348bd..098d4e7382fdd5177a9a354d6812cec2def5550b 100644
+--- a/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionImpl.java
++++ b/src/main/java/net/fabricmc/loom/extension/LoomGradleExtensionImpl.java
+@@ -44,10 +44,10 @@ import net.fabricmc.loom.configuration.InstallerData;
+ import net.fabricmc.loom.configuration.LoomDependencyManager;
+ import net.fabricmc.loom.configuration.accesswidener.AccessWidenerFile;
+ import net.fabricmc.loom.configuration.processors.JarProcessorManager;
+-import net.fabricmc.loom.configuration.providers.mappings.IntermediaryMappingsProvider;
++import net.fabricmc.loom.configuration.providers.mappings.CalamusMappingsProvider;
+ import net.fabricmc.loom.configuration.providers.mappings.MappingsProviderImpl;
+ import net.fabricmc.loom.configuration.providers.minecraft.MinecraftProvider;
+-import net.fabricmc.loom.configuration.providers.minecraft.mapped.IntermediaryMinecraftProvider;
++import net.fabricmc.loom.configuration.providers.minecraft.mapped.CalamusMinecraftProvider;
+ import net.fabricmc.loom.configuration.providers.minecraft.mapped.NamedMinecraftProvider;
+ import net.fabricmc.loom.util.download.Download;
+ import net.fabricmc.loom.util.download.DownloadBuilder;
+@@ -67,7 +67,7 @@ public class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl implemen
+ 	private MinecraftProvider minecraftProvider;
+ 	private MappingsProviderImpl mappingsProvider;
+ 	private NamedMinecraftProvider<?> namedMinecraftProvider;
+-	private IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider;
++	private CalamusMinecraftProvider<?> calamusMinecraftProvider;
+ 	private InstallerData installerData;
+ 	private boolean refreshDeps;
+ 
+@@ -80,9 +80,9 @@ public class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl implemen
+ 		this.unmappedMods = project.files();
+ 
+ 		// Setup the default intermediate mappings provider.
+-		setIntermediateMappingsProvider(IntermediaryMappingsProvider.class, provider -> {
+-			provider.getIntermediaryUrl()
+-					.convention(getIntermediaryUrl())
++		setIntermediateMappingsProvider(CalamusMappingsProvider.class, provider -> {
++			provider.getCalamusUrl()
++					.convention(getCalamusUrl())
+ 					.finalizeValueOnRead();
+ 
+ 			provider.getRefreshDeps().set(project.provider(() -> LoomGradleExtension.get(project).refreshDeps()));
+@@ -151,8 +151,8 @@ public class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl implemen
+ 	}
+ 
+ 	@Override
+-	public IntermediaryMinecraftProvider<?> getIntermediaryMinecraftProvider() {
+-		return Objects.requireNonNull(intermediaryMinecraftProvider, "Cannot get IntermediaryMinecraftProvider before it has been setup");
++	public CalamusMinecraftProvider<?> getCalamusMinecraftProvider() {
++		return Objects.requireNonNull(calamusMinecraftProvider, "Cannot get CalamusMinecraftProvider before it has been setup");
+ 	}
+ 
+ 	@Override
+@@ -161,8 +161,8 @@ public class LoomGradleExtensionImpl extends LoomGradleExtensionApiImpl implemen
+ 	}
+ 
+ 	@Override
+-	public void setIntermediaryMinecraftProvider(IntermediaryMinecraftProvider<?> intermediaryMinecraftProvider) {
+-		this.intermediaryMinecraftProvider = intermediaryMinecraftProvider;
++	public void setCalamusMinecraftProvider(CalamusMinecraftProvider<?> calamusMinecraftProvider) {
++		this.calamusMinecraftProvider = calamusMinecraftProvider;
+ 	}
+ 
+ 	@Override
+diff --git a/src/main/java/net/fabricmc/loom/extension/MixinExtensionApiImpl.java b/src/main/java/net/fabricmc/loom/extension/MixinExtensionApiImpl.java
+index 386aab8a18dd8d4546939a6cf857d3a5de6cada9..f2113124247195181c914c3fc360ceb2127af65b 100644
+--- a/src/main/java/net/fabricmc/loom/extension/MixinExtensionApiImpl.java
++++ b/src/main/java/net/fabricmc/loom/extension/MixinExtensionApiImpl.java
+@@ -52,7 +52,7 @@ public abstract class MixinExtensionApiImpl implements MixinExtensionAPI {
+ 				.convention(true);
+ 
+ 		this.refmapTargetNamespace = project.getObjects().property(String.class)
+-				.convention(MappingsNamespace.INTERMEDIARY.toString());
++				.convention(MappingsNamespace.CALAMUS.toString());
+ 		this.refmapTargetNamespace.finalizeValueOnRead();
+ 
+ 		this.messages = project.getObjects().mapProperty(String.class, String.class);
+diff --git a/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java b/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
+index 053d8ec54e54d760ef03e57ddd818f3718f292b3..68648e976b778aafc1a2a47d3836047159f7274d 100644
+--- a/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
++++ b/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
+@@ -95,7 +95,7 @@ public abstract class AbstractRemapJarTask extends Jar {
+ 	@Inject
+ 	public AbstractRemapJarTask() {
+ 		getSourceNamespace().convention(MappingsNamespace.NAMED.toString()).finalizeValueOnRead();
+-		getTargetNamespace().convention(MappingsNamespace.INTERMEDIARY.toString()).finalizeValueOnRead();
++		getTargetNamespace().convention(MappingsNamespace.CALAMUS.toString()).finalizeValueOnRead();
+ 		getRemapperIsolation().convention(false).finalizeValueOnRead();
+ 		getIncludesClientOnlyClasses().convention(false).finalizeValueOnRead();
+ 	}
+diff --git a/src/main/java/net/fabricmc/loom/task/GenerateSourcesTask.java b/src/main/java/net/fabricmc/loom/task/GenerateSourcesTask.java
+index 2031892d7e99fc28be7459dd182a7d603c7f2b79..f77cc14bb124fc84426141cf00f4c89d35b96426 100644
+--- a/src/main/java/net/fabricmc/loom/task/GenerateSourcesTask.java
++++ b/src/main/java/net/fabricmc/loom/task/GenerateSourcesTask.java
+@@ -323,7 +323,7 @@ public abstract class GenerateSourcesTask extends AbstractLoomTask {
+ 		MemoryMappingTree mappingTree = new MemoryMappingTree();
+ 
+ 		try (Reader reader = Files.newBufferedReader(inputMappings, StandardCharsets.UTF_8)) {
+-			MappingReader.read(reader, new MappingSourceNsSwitch(mappingTree, MappingsNamespace.INTERMEDIARY.toString()));
++			MappingReader.read(reader, new MappingSourceNsSwitch(mappingTree, MappingsNamespace.CALAMUS.toString()));
+ 		} catch (IOException e) {
+ 			throw new RuntimeException("Failed to read mappings", e);
+ 		}
+diff --git a/src/main/java/net/fabricmc/loom/task/MigrateMappingsTask.java b/src/main/java/net/fabricmc/loom/task/MigrateMappingsTask.java
+index f2b830bede2dff051244baab7d3b82827e364bba..bf3cdf550f94036164080f9321cb291dddf35898 100644
+--- a/src/main/java/net/fabricmc/loom/task/MigrateMappingsTask.java
++++ b/src/main/java/net/fabricmc/loom/task/MigrateMappingsTask.java
+@@ -174,7 +174,7 @@ public abstract class MigrateMappingsTask extends AbstractLoomTask {
+ 		MappingSet mappingSet = new TinyMappingsJoiner(
+ 				currentMappings, MappingsNamespace.NAMED.toString(),
+ 				targetMappings, MappingsNamespace.NAMED.toString(),
+-				MappingsNamespace.INTERMEDIARY.toString()
++				MappingsNamespace.CALAMUS.toString()
+ 		).read();
+ 
+ 		project.getLogger().lifecycle(":remapping");
+@@ -183,12 +183,12 @@ public abstract class MigrateMappingsTask extends AbstractLoomTask {
+ 		final JavaVersion javaVersion = project.getExtensions().getByType(JavaPluginExtension.class).getSourceCompatibility();
+ 		mercury.setSourceCompatibility(javaVersion.toString());
+ 
+-		for (Path intermediaryJar : extension.getMinecraftJars(MappingsNamespace.INTERMEDIARY)) {
+-			mercury.getClassPath().add(intermediaryJar);
++		for (Path calamusJar : extension.getMinecraftJars(MappingsNamespace.CALAMUS)) {
++			mercury.getClassPath().add(calamusJar);
+ 		}
+ 
+-		for (Path intermediaryJar : extension.getMinecraftJars(MappingsNamespace.NAMED)) {
+-			mercury.getClassPath().add(intermediaryJar);
++		for (Path calamusJar : extension.getMinecraftJars(MappingsNamespace.NAMED)) {
++			mercury.getClassPath().add(calamusJar);
+ 		}
+ 
+ 		mercury.getProcessors().add(MercuryRemapper.create(mappingSet));
+diff --git a/src/main/java/net/fabricmc/loom/task/RemapTaskConfiguration.java b/src/main/java/net/fabricmc/loom/task/RemapTaskConfiguration.java
+index 63702a3298a3a88466e991929429e7c2168b6bc0..f4e60323a554257d44efb33ec3a585dffe1fd46c 100644
+--- a/src/main/java/net/fabricmc/loom/task/RemapTaskConfiguration.java
++++ b/src/main/java/net/fabricmc/loom/task/RemapTaskConfiguration.java
+@@ -60,7 +60,7 @@ public class RemapTaskConfiguration {
+ 
+ 			// Basic task setup
+ 			task.dependsOn(jarTask);
+-			task.setDescription("Remaps the built project jar to intermediary mappings.");
++			task.setDescription("Remaps the built project jar to calamus mappings.");
+ 			task.setGroup(Constants.TaskGroup.FABRIC);
+ 			project.getArtifacts().add(JavaPlugin.API_ELEMENTS_CONFIGURATION_NAME, task);
+ 			project.getArtifacts().add(JavaPlugin.RUNTIME_ELEMENTS_CONFIGURATION_NAME, task);
+@@ -104,7 +104,7 @@ public class RemapTaskConfiguration {
+ 		final String sourcesJarTaskName = SourceSetHelper.getMainSourceSet(project).getSourcesJarTaskName();
+ 
+ 		TaskProvider<RemapSourcesJarTask> remapSourcesTask = tasks.register(REMAP_SOURCES_JAR_TASK_NAME, RemapSourcesJarTask.class, task -> {
+-			task.setDescription("Remaps the default sources jar to intermediary mappings.");
++			task.setDescription("Remaps the default sources jar to calamus mappings.");
+ 			task.setGroup(Constants.TaskGroup.FABRIC);
+ 
+ 			final Task sourcesTask = project.getTasks().findByName(sourcesJarTaskName);
+diff --git a/src/main/java/net/fabricmc/loom/task/ValidateMixinNameTask.java b/src/main/java/net/fabricmc/loom/task/ValidateMixinNameTask.java
+index 8093e04bb4c38cdd2d4ee4875981594d098d8b06..b987f63d2eec1b1197b648dcd6a439841341419b 100644
+--- a/src/main/java/net/fabricmc/loom/task/ValidateMixinNameTask.java
++++ b/src/main/java/net/fabricmc/loom/task/ValidateMixinNameTask.java
+@@ -119,7 +119,7 @@ public abstract class ValidateMixinNameTask extends SourceTask {
+ 				final String expectedMixinClassName = mixin.expectedClassName();
+ 
+ 				if (expectedMixinClassName.startsWith("class_")) {
+-					// Don't enforce intermediary named mixins.
++					// Don't enforce calamus named mixins.
+ 					continue;
+ 				}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/task/launch/GenerateRemapClasspathTask.java b/src/main/java/net/fabricmc/loom/task/launch/GenerateRemapClasspathTask.java
+index 8077cd35bd12af577d2bea517b6192008d3b7f4d..ffa0e2c7c3f838fe03c89930cba08e23d8e13996 100644
+--- a/src/main/java/net/fabricmc/loom/task/launch/GenerateRemapClasspathTask.java
++++ b/src/main/java/net/fabricmc/loom/task/launch/GenerateRemapClasspathTask.java
+@@ -67,7 +67,7 @@ public abstract class GenerateRemapClasspathTask extends AbstractLoomTask {
+ 	public void run() {
+ 		final List<File> remapClasspath = new ArrayList<>(getRemapClasspath().getFiles());
+ 
+-		for (Path minecraftJar : getExtension().getMinecraftJars(MappingsNamespace.INTERMEDIARY)) {
++		for (Path minecraftJar : getExtension().getMinecraftJars(MappingsNamespace.CALAMUS)) {
+ 			remapClasspath.add(minecraftJar.toFile());
+ 		}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/util/Constants.java b/src/main/java/net/fabricmc/loom/util/Constants.java
+index de21aa9f24bf2459ba397baa78ecb2289bef5ba8..202a49113b8e4282f2c675de46b5342ea82b4bdc 100644
+--- a/src/main/java/net/fabricmc/loom/util/Constants.java
++++ b/src/main/java/net/fabricmc/loom/util/Constants.java
+@@ -107,8 +107,8 @@ public class Constants {
+ 	}
+ 
+ 	public static final class MixinArguments {
+-		public static final String IN_MAP_FILE_NAMED_INTERMEDIARY = "inMapFileNamedIntermediary";
+-		public static final String OUT_MAP_FILE_NAMED_INTERMEDIARY = "outMapFileNamedIntermediary";
++		public static final String IN_MAP_FILE_NAMED_CALAMUS = "inMapFileNamedCalamus";
++		public static final String OUT_MAP_FILE_NAMED_CALAMUS = "outMapFileNamedCalamus";
+ 		public static final String OUT_REFMAP_FILE = "outRefMapFile";
+ 		public static final String DEFAULT_OBFUSCATION_ENV = "defaultObfuscationEnv";
+ 		public static final String QUIET = "quiet";
+diff --git a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java b/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
+index 4d4a06ac1ddd61773ed5580491df09bec0780995..6faea4d12151ba13515477fde7e86391cf85376f 100644
+--- a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
++++ b/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
+@@ -163,8 +163,8 @@ public class SourceRemapper {
+ 		MappingSet mappings = extension.getOrCreateSrcMappingCache(toNamed ? 1 : 0, () -> {
+ 			try {
+ 				MemoryMappingTree m = mappingsProvider.getMappings();
+-				project.getLogger().info(":loading " + (toNamed ? "intermediary -> named" : "named -> intermediary") + " source mappings");
+-				return new TinyMappingsReader(m, toNamed ? MappingsNamespace.INTERMEDIARY.toString() : MappingsNamespace.NAMED.toString(), toNamed ? MappingsNamespace.NAMED.toString() : MappingsNamespace.INTERMEDIARY.toString()).read();
++				project.getLogger().info(":loading " + (toNamed ? "calamus -> named" : "named -> calamus") + " source mappings");
++				return new TinyMappingsReader(m, toNamed ? MappingsNamespace.CALAMUS.toString() : MappingsNamespace.NAMED.toString(), toNamed ? MappingsNamespace.NAMED.toString() : MappingsNamespace.CALAMUS.toString()).read();
+ 			} catch (Exception e) {
+ 				throw new RuntimeException(e);
+ 			}
+@@ -181,12 +181,12 @@ public class SourceRemapper {
+ 				}
+ 			}
+ 
+-			for (Path intermediaryJar : extension.getMinecraftJars(MappingsNamespace.INTERMEDIARY)) {
+-				m.getClassPath().add(intermediaryJar);
++			for (Path calamusJar : extension.getMinecraftJars(MappingsNamespace.CALAMUS)) {
++				m.getClassPath().add(calamusJar);
+ 			}
+ 
+-			for (Path intermediaryJar : extension.getMinecraftJars(MappingsNamespace.NAMED)) {
+-				m.getClassPath().add(intermediaryJar);
++			for (Path calamusJar : extension.getMinecraftJars(MappingsNamespace.NAMED)) {
++				m.getClassPath().add(calamusJar);
+ 			}
+ 
+ 			Set<File> files = project.getConfigurations()
+diff --git a/src/main/java/net/fabricmc/loom/util/TinyRemapperHelper.java b/src/main/java/net/fabricmc/loom/util/TinyRemapperHelper.java
+index de9c82e8320ccfb2fa634197f30c329f1e2859ac..e7c80066c2b7da4351f64f33581cbd62215727d5 100644
+--- a/src/main/java/net/fabricmc/loom/util/TinyRemapperHelper.java
++++ b/src/main/java/net/fabricmc/loom/util/TinyRemapperHelper.java
+@@ -72,7 +72,7 @@ public final class TinyRemapperHelper {
+ 			throw new IllegalStateException("Mappings src namespace must match remap src namespace");
+ 		}
+ 
+-		int intermediaryNsId = mappingTree.getNamespaceId(MappingsNamespace.INTERMEDIARY.toString());
++		int calamusNsId = mappingTree.getNamespaceId(MappingsNamespace.CALAMUS.toString());
+ 
+ 		TinyRemapper.Builder builder = TinyRemapper.newRemapper()
+ 				.withMappings(create(mappingTree, fromM, toM, true))
+@@ -83,7 +83,7 @@ public final class TinyRemapperHelper {
+ 				.inferNameFromSameLvIndex(true)
+ 				.extraPreApplyVisitor((cls, next) -> {
+ 					if (fixRecords && !cls.isRecord() && "java/lang/Record".equals(cls.getSuperName())) {
+-						return new RecordComponentFixVisitor(next, mappingTree, intermediaryNsId);
++						return new RecordComponentFixVisitor(next, mappingTree, calamusNsId);
+ 					}
+ 
+ 					return next;
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/LoomMocks.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/LoomMocks.groovy
+index 54b70b8d6550ddef3c25402dd33ce6e6b1337af3..7e03e4214e50ae62ada6d9fb4a23ee47f488282a 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/LoomMocks.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/LoomMocks.groovy
+@@ -24,7 +24,7 @@
+ 
+ package net.fabricmc.loom.test.unit
+ 
+-import net.fabricmc.loom.configuration.providers.mappings.IntermediaryMappingsProvider
++import net.fabricmc.loom.configuration.providers.mappings.CalamusMappingsProvider
+ import net.fabricmc.loom.test.util.GradleTestUtil
+ import net.fabricmc.loom.util.download.Download
+ 
+@@ -34,16 +34,16 @@ import static org.mockito.Mockito.spy
+ import static org.mockito.Mockito.when
+ 
+ class LoomMocks {
+-    static IntermediaryMappingsProvider intermediaryMappingsProviderMock(String minecraftVersion, String intermediaryUrl) {
++    static CalamusMappingsProvider intermediaryMappingsProviderMock(String minecraftVersion, String intermediaryUrl) {
+         def minecraftVersionProperty = GradleTestUtil.mockProperty(minecraftVersion)
+         def intermediaryUrlProperty = GradleTestUtil.mockProperty(intermediaryUrl)
+         def downloaderProperty = GradleTestUtil.mockProperty(Download.&create as Function)
+ 
+         Objects.requireNonNull(minecraftVersionProperty.get())
+ 
+-        def mock = spy(IntermediaryMappingsProvider.class)
++        def mock = spy(CalamusMappingsProvider.class)
+         when(mock.getMinecraftVersion()).thenReturn(minecraftVersionProperty)
+-        when(mock.getIntermediaryUrl()).thenReturn(intermediaryUrlProperty)
++        when(mock.getCalamusUrl()).thenReturn(intermediaryUrlProperty)
+         when(mock.getDownloader()).thenReturn(downloaderProperty)
+         return mock
+     }
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/FileMappingLayerTest.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/FileMappingLayerTest.groovy
+index 37e7352e05c244b2202d1fd6b357df4f645d4d03..13366512d90376a6dd1628c552179e196e4ac4ad 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/FileMappingLayerTest.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/FileMappingLayerTest.groovy
+@@ -26,8 +26,8 @@ package net.fabricmc.loom.test.unit.layeredmappings
+ 
+ import net.fabricmc.loom.api.mappings.layered.MappingsNamespace
+ import net.fabricmc.loom.api.mappings.layered.spec.FileSpec
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.file.FileMappingsSpecBuilderImpl
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec
+ import net.fabricmc.loom.util.ZipUtils
+ import net.fabricmc.loom.util.download.Download
+ import spock.lang.Unroll
+@@ -47,12 +47,12 @@ class FileMappingLayerTest extends LayeredMappingsSpecification {
+ 			def builder = FileMappingsSpecBuilderImpl.builder(FileSpec.create(mappingFile))
+ 			setupType.mappingsSpec.accept(builder)
+ 			def mappings = getLayeredMappings(
+-					new IntermediaryMappingsSpec(),
++					new CalamusMappingsSpec(),
+ 					builder.build()
+ 			)
+ 		then:
+ 			mappings.srcNamespace == "named"
+-			mappings.dstNamespaces == ["intermediary", "official"]
++			mappings.dstNamespaces == ["calamus", "official"]
+ 			mappings.classes.size() == 6111
+ 			mappings.classes[0].srcName == "net/minecraft/block/FenceBlock"
+ 			mappings.classes[0].getDstName(0) == "net/minecraft/class_2354"
+@@ -76,7 +76,7 @@ class FileMappingLayerTest extends LayeredMappingsSpecification {
+ 				.downloadPath(mappingsFile.toPath())
+ 		when:
+ 			def mappings = getLayeredMappings(
+-					new IntermediaryMappingsSpec(),
++					new CalamusMappingsSpec(),
+ 					FileMappingsSpecBuilderImpl.builder(FileSpec.create(mappingsFile))
+ 							.fallbackNamespaces('named', 'official')
+ 							.mergeNamespace(MappingsNamespace.OFFICIAL)
+@@ -85,7 +85,7 @@ class FileMappingLayerTest extends LayeredMappingsSpecification {
+ 			def tiny = getTiny(mappings)
+ 		then:
+ 			mappings.srcNamespace == "named"
+-			mappings.dstNamespaces == ["intermediary", "official"]
++			mappings.dstNamespaces == ["calamus", "official"]
+ 			mappings.classes.size() == 6113
+ 			mappings.classes[0].srcName.hashCode() == 1869546970 // MojMap name, just check the hash
+ 			mappings.classes[0].getDstName(0) == "net/minecraft/class_2354"
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/IntermediaryMappingLayerTest.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/IntermediaryMappingLayerTest.groovy
+index 0f6c416110c0234a4a4e6d795372436a6da98173..51c1a63330a18d52ca27c72ce76a322a9e928112 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/IntermediaryMappingLayerTest.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/IntermediaryMappingLayerTest.groovy
+@@ -24,18 +24,18 @@
+ 
+ package net.fabricmc.loom.test.unit.layeredmappings
+ 
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec
+ 
+ class IntermediaryMappingLayerTest extends LayeredMappingsSpecification {
+-    def "Read intermediary mappings" () {
++    def "Read calamus mappings" () {
+         setup:
+             intermediaryUrl = INTERMEDIARY_1_17_URL
+         when:
+-            def mappings = getSingleMapping(new IntermediaryMappingsSpec())
++            def mappings = getSingleMapping(new CalamusMappingsSpec())
+             def tiny = getTiny(mappings)
+         then:
+             mappings.srcNamespace == "official"
+-            mappings.dstNamespaces == ["intermediary", "named"]
++            mappings.dstNamespaces == ["calamus", "named"]
+             mappings.classes.size() == 6107
+             mappings.getClass("abc").getDstName(0) == "net/minecraft/class_3191"
+             mappings.getClass("abc").getDstName(1) == "net/minecraft/class_3191"
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingSpecBuilderTest.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingSpecBuilderTest.groovy
+index a3cb5f6c433f322a5e7033501bc307e009762d67..eaae6b2566b27ff0d67945a53b20583be2d7bc22 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingSpecBuilderTest.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingSpecBuilderTest.groovy
+@@ -28,7 +28,7 @@ import net.fabricmc.loom.configuration.providers.mappings.file.FileMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.utils.MavenFileSpec
+ import net.fabricmc.loom.configuration.providers.mappings.LayeredMappingSpec
+ import net.fabricmc.loom.configuration.providers.mappings.LayeredMappingSpecBuilderImpl
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.mojmap.MojangMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.parchment.ParchmentMappingsSpec
+ import net.fabricmc.loom.util.ClosureAction
+@@ -44,7 +44,7 @@ class LayeredMappingSpecBuilderTest extends Specification {
+         then:
+             layers.size() == 2
+             spec.version == "layered+hash.2198"
+-            layers[0].class == IntermediaryMappingsSpec
++            layers[0].class == CalamusMappingsSpec
+             layers[1].class == MojangMappingsSpec
+     }
+ 
+@@ -60,7 +60,7 @@ class LayeredMappingSpecBuilderTest extends Specification {
+         then:
+             spec.version == "layered+hash.863752751"
+             layers.size() == 3
+-            layers[0].class == IntermediaryMappingsSpec
++            layers[0].class == CalamusMappingsSpec
+             layers[1].class == MojangMappingsSpec
+             layers[2].class == ParchmentMappingsSpec
+             (parchment.fileSpec() as MavenFileSpec).dependencyNotation() == "I like cake"
+@@ -80,7 +80,7 @@ class LayeredMappingSpecBuilderTest extends Specification {
+         then:
+             spec.version == "layered+hash.863752757"
+             layers.size() == 3
+-            layers[0].class == IntermediaryMappingsSpec
++            layers[0].class == CalamusMappingsSpec
+             layers[1].class == MojangMappingsSpec
+             layers[2].class == ParchmentMappingsSpec
+             (parchment.fileSpec() as MavenFileSpec).dependencyNotation() == "I like cake"
+@@ -100,7 +100,7 @@ class LayeredMappingSpecBuilderTest extends Specification {
+         then:
+             spec.version == "layered+hash.1144427140"
+             layers.size() == 3
+-            layers[0].class == IntermediaryMappingsSpec
++            layers[0].class == CalamusMappingsSpec
+             layers[1].class == MojangMappingsSpec
+             layers[2].class == ParchmentMappingsSpec
+             (parchment.fileSpec() as MavenFileSpec).dependencyNotation() == "I really like cake"
+@@ -116,7 +116,7 @@ class LayeredMappingSpecBuilderTest extends Specification {
+         then:
+             spec.version == "layered+hash.1133958200"
+             layers.size() == 2
+-            layers[0].class == IntermediaryMappingsSpec
++            layers[0].class == CalamusMappingsSpec
+             layers[1].class == FileMappingsSpec
+             ((layers[1] as FileMappingsSpec).fileSpec() as MavenFileSpec).dependencyNotation() == "net.fabricmc:yarn:1.18.1+build.1:v2"
+     }
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingsSpecification.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingsSpecification.groovy
+index da3d5b56ca1c71eb3c1f1cb47d24f0c4f7400358..5df57325aec685fb7575cf673215b4e302bd96bd 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingsSpecification.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/LayeredMappingsSpecification.groovy
+@@ -106,7 +106,7 @@ abstract class LayeredMappingsSpecification extends Specification implements Lay
+     MemoryMappingTree reorder(MemoryMappingTree mappingTree) {
+         def reorderedMappings = new MemoryMappingTree()
+         def nsReorder = new MappingDstNsReorder(reorderedMappings, Collections.singletonList(MappingsNamespace.NAMED.toString()))
+-        def nsSwitch = new MappingSourceNsSwitch(nsReorder, MappingsNamespace.INTERMEDIARY.toString(), true)
++        def nsSwitch = new MappingSourceNsSwitch(nsReorder, MappingsNamespace.CALAMUS.toString(), true)
+         mappingTree.accept(nsSwitch)
+         return reorderedMappings
+     }
+@@ -130,7 +130,7 @@ abstract class LayeredMappingsSpecification extends Specification implements Lay
+         }
+ 
+         @Override
+-        Supplier<MemoryMappingTree> intermediaryTree() {
++        Supplier<MemoryMappingTree> calamusTree() {
+             return {
+                 IntermediateMappingsService.create(LoomMocks.intermediaryMappingsProviderMock("test", intermediaryUrl), minecraftProvider()).memoryMappingTree
+             }
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/MojangMappingLayerTest.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/MojangMappingLayerTest.groovy
+index 9a55075bb9da5b122e51dff5e8e18f60b0783402..48ff87aec0bd1d4e264e8b594e0aaf9653aedf16 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/MojangMappingLayerTest.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/MojangMappingLayerTest.groovy
+@@ -24,7 +24,7 @@
+ 
+ package net.fabricmc.loom.test.unit.layeredmappings
+ 
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.mojmap.MojangMappingsSpecBuilderImpl
+ 
+ class MojangMappingLayerTest extends LayeredMappingsSpecification {
+@@ -34,13 +34,13 @@ class MojangMappingLayerTest extends LayeredMappingsSpecification {
+             mockMinecraftProvider.getVersionInfo() >> VERSION_META_1_17
+         when:
+             def mappings = getLayeredMappings(
+-                    new IntermediaryMappingsSpec(),
++                    new CalamusMappingsSpec(),
+                     buildMojangMappingsSpec(true)
+             )
+             def tiny = getTiny(mappings)
+         then:
+             mappings.srcNamespace == "named"
+-            mappings.dstNamespaces == ["intermediary", "official"]
++            mappings.dstNamespaces == ["calamus", "official"]
+             mappings.classes.size() == 6113
+             mappings.classes[0].srcName.hashCode() == 1869546970 // MojMap name, just check the hash
+             mappings.classes[0].getDstName(0) == "net/minecraft/class_2354"
+@@ -54,13 +54,13 @@ class MojangMappingLayerTest extends LayeredMappingsSpecification {
+             mockMinecraftProvider.getVersionInfo() >> VERSION_META_1_17
+         when:
+             def mappings = getLayeredMappings(
+-                    new IntermediaryMappingsSpec(),
++                    new CalamusMappingsSpec(),
+                     buildMojangMappingsSpec(false)
+             )
+             def tiny = getTiny(mappings)
+         then:
+             mappings.srcNamespace == "named"
+-            mappings.dstNamespaces == ["intermediary", "official"]
++            mappings.dstNamespaces == ["calamus", "official"]
+             mappings.classes.size() == 6113
+             mappings.classes[0].srcName.hashCode() == 1869546970 // MojMap name, just check the hash
+             mappings.classes[0].getDstName(0) == "net/minecraft/class_2354"
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/ParchmentMappingLayerTest.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/ParchmentMappingLayerTest.groovy
+index c126c3dd941a29eb5ed047bc129c847cfe0d9c65..bc3414a3ffbba13bbc371700b628287aa5d8f8b5 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/ParchmentMappingLayerTest.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/ParchmentMappingLayerTest.groovy
+@@ -25,7 +25,7 @@
+ package net.fabricmc.loom.test.unit.layeredmappings
+ 
+ import net.fabricmc.loom.api.mappings.layered.spec.FileSpec
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.mojmap.MojangMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.parchment.ParchmentMappingsSpec
+ 
+@@ -37,7 +37,7 @@ class ParchmentMappingLayerTest extends LayeredMappingsSpecification {
+         when:
+             withMavenFile(PARCHMENT_NOTATION, downloadFile(PARCHMENT_URL, "parchment.zip"))
+             def mappings = getLayeredMappings(
+-                    new IntermediaryMappingsSpec(),
++                    new CalamusMappingsSpec(),
+                     new MojangMappingsSpec(true),
+                     new ParchmentMappingsSpec(FileSpec.create(PARCHMENT_NOTATION), false)
+             )
+@@ -45,7 +45,7 @@ class ParchmentMappingLayerTest extends LayeredMappingsSpecification {
+             def reorderedMappings = reorder(mappings)
+         then:
+             mappings.srcNamespace == "named"
+-            mappings.dstNamespaces == ["intermediary", "official"]
++            mappings.dstNamespaces == ["calamus", "official"]
+             mappings.classes.size() == 5747
+             mappings.classes[0].srcName.hashCode() == -1112444138 // MojMap name, just check the hash
+             mappings.classes[0].getDstName(0) == "net/minecraft/class_2573"
+@@ -60,7 +60,7 @@ class ParchmentMappingLayerTest extends LayeredMappingsSpecification {
+         when:
+             withMavenFile(PARCHMENT_NOTATION, downloadFile(PARCHMENT_URL, "parchment.zip"))
+             def mappings = getLayeredMappings(
+-                    new IntermediaryMappingsSpec(),
++                    new CalamusMappingsSpec(),
+                     new MojangMappingsSpec(true),
+                     new ParchmentMappingsSpec(FileSpec.create(PARCHMENT_NOTATION), true)
+             )
+@@ -68,7 +68,7 @@ class ParchmentMappingLayerTest extends LayeredMappingsSpecification {
+             def reorderedMappings = reorder(mappings)
+         then:
+             mappings.srcNamespace == "named"
+-            mappings.dstNamespaces == ["intermediary", "official"]
++            mappings.dstNamespaces == ["calamus", "official"]
+             mappings.classes.size() == 5747
+             mappings.classes[0].srcName.hashCode() == -1112444138 // MojMap name, just check the hash
+             mappings.classes[0].getDstName(0) == "net/minecraft/class_2573"
+diff --git a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/UnpickLayerTest.groovy b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/UnpickLayerTest.groovy
+index 0e43bcadb001e1dedfc5a8e960e80386f974003d..b58842d42c55e5faa59c0d911cccecb0137cc91f 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/UnpickLayerTest.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/unit/layeredmappings/UnpickLayerTest.groovy
+@@ -25,8 +25,8 @@
+ package net.fabricmc.loom.test.unit.layeredmappings
+ 
+ import net.fabricmc.loom.api.mappings.layered.spec.FileSpec
++import net.fabricmc.loom.configuration.providers.mappings.calamus.CalamusMappingsSpec
+ import net.fabricmc.loom.configuration.providers.mappings.file.FileMappingsSpecBuilderImpl
+-import net.fabricmc.loom.configuration.providers.mappings.intermediary.IntermediaryMappingsSpec
+ 
+ class UnpickLayerTest extends LayeredMappingsSpecification {
+     def "read unpick data from yarn"() {
+@@ -36,7 +36,7 @@ class UnpickLayerTest extends LayeredMappingsSpecification {
+         when:
+             def builder = FileMappingsSpecBuilderImpl.builder(FileSpec.create(YARN_1_17_URL)).containsUnpick()
+             def unpickData = getUnpickData(
+-                    new IntermediaryMappingsSpec(),
++                    new CalamusMappingsSpec(),
+                     builder.build()
+             )
+             def metadata = unpickData.metadata()
+diff --git a/src/test/kotlin/net/fabricmc/loom/test/kotlin/KotlinClassMetadataRemappingAnnotationVisitorTest.kt b/src/test/kotlin/net/fabricmc/loom/test/kotlin/KotlinClassMetadataRemappingAnnotationVisitorTest.kt
+index 7c862b6627d8c12bbaa42df54f1fe75b2dcb0df5..2d3a07eeb24037fe550b6f2bb0e861f87e5f2d65 100644
+--- a/src/test/kotlin/net/fabricmc/loom/test/kotlin/KotlinClassMetadataRemappingAnnotationVisitorTest.kt
++++ b/src/test/kotlin/net/fabricmc/loom/test/kotlin/KotlinClassMetadataRemappingAnnotationVisitorTest.kt
+@@ -101,7 +101,7 @@ class KotlinClassMetadataRemappingAnnotationVisitorTest {
+     private fun readMappings(name: String): IMappingProvider {
+         val mappingTree = MemoryMappingTree()
+         MappingReader.read(Paths.get("src/test/resources/mappings/$name.mappings"), mappingTree)
+-        return TinyRemapperHelper.create(mappingTree, "named", "intermediary", false)
++        return TinyRemapperHelper.create(mappingTree, "named", "calamus", false)
+     }
+ 
+     private fun stringWriterVisitor(writer: StringWriter): ClassVisitor {
+diff --git a/src/test/resources/accesswidener/expected.accesswidener b/src/test/resources/accesswidener/expected.accesswidener
+index 66f55429d94c63a30be5c0e953d07926dde72228..aa4455e520f6cea7a1e2978a8562cd4801a323f4 100644
+--- a/src/test/resources/accesswidener/expected.accesswidener
++++ b/src/test/resources/accesswidener/expected.accesswidener
+@@ -1,4 +1,4 @@
+-accessWidener	v1	intermediary
++accessWidener	v1	calamus
+ accessible	method	net/minecraft/class_1928$class_4314	<init>	(Ljava/util/function/Supplier;Ljava/util/function/Function;Ljava/util/function/BiConsumer;Lnet/minecraft/class_1928$class_5199;)V
+ extendable	method	net/minecraft/class_1928$class_4314	<init>	(Ljava/util/function/Supplier;Ljava/util/function/Function;Ljava/util/function/BiConsumer;Lnet/minecraft/class_1928$class_5199;)V
+ accessible	class	net/minecraft/class_1928$class_5199
+diff --git a/src/test/resources/mappings/PosInChunk.mappings b/src/test/resources/mappings/PosInChunk.mappings
+index c6f1d3c44c50983befefd3253e126d614673391c..592453596fc306eea24c8ed054157fc786c7aaf3 100644
+--- a/src/test/resources/mappings/PosInChunk.mappings
++++ b/src/test/resources/mappings/PosInChunk.mappings
+@@ -1,4 +1,4 @@
+-tiny	2	0	intermediary	named
++tiny	2	0	calamus	named
+ c	net/minecraft/class_2338	net/minecraft/util/math/BlockPos
+ 	c	Represents the position of a block in a three-dimensional volume.\n\n<p>The position is integer-valued.\n\n<p>A block position may be mutable; hence, when using block positions\nobtained from other places as map keys, etc., you should call {@link\n#toImmutable()} to obtain an immutable block position.
+ 	f	J	field_10976	BITS_X
+diff --git a/src/test/resources/mappings/TestExtensionKt.mappings b/src/test/resources/mappings/TestExtensionKt.mappings
+index ca34590645cc421ff39919967dc4af26441d4284..0c2e9972f805a7ed2868a6faad316bdc752e5138 100644
+--- a/src/test/resources/mappings/TestExtensionKt.mappings
++++ b/src/test/resources/mappings/TestExtensionKt.mappings
+@@ -1,2 +1,2 @@
+-tiny	2	0	intermediary	named
++tiny	2	0	calamus	named
+ c	net/minecraft/class_1297	net/minecraft/entity/Entity
+\ No newline at end of file
+diff --git a/src/test/resources/projects/modJavadoc/dummyDependency/javadoc.tiny b/src/test/resources/projects/modJavadoc/dummyDependency/javadoc.tiny
+index 4a9212e561fd05a8d2c3faaef76c6a15ea4afeb2..4c1221cb71aaf27236500f16fbba9e2dc5fd40e7 100644
+--- a/src/test/resources/projects/modJavadoc/dummyDependency/javadoc.tiny
++++ b/src/test/resources/projects/modJavadoc/dummyDependency/javadoc.tiny
+@@ -1,4 +1,4 @@
+-tiny	2	0	intermediary
++tiny	2	0	calamus
+ c	net/minecraft/class_2246
+ 	c	An example of a mod added class javadoc
+ 	f	Lnet/minecraft/class_2248;	field_10382
+diff --git a/src/test/resources/projects/transitiveAccesswidener/dummyDependency/dummy.accesswidener b/src/test/resources/projects/transitiveAccesswidener/dummyDependency/dummy.accesswidener
+index 05537ad159cc1c8eca365163e0fd7e57a47d286d..ff0bd29fbff8bbf35028d6863991447c0586f026 100644
+--- a/src/test/resources/projects/transitiveAccesswidener/dummyDependency/dummy.accesswidener
++++ b/src/test/resources/projects/transitiveAccesswidener/dummyDependency/dummy.accesswidener
+@@ -1,3 +1,3 @@
+-accessWidener	v2	intermediary
++accessWidener	v2	calamus
+ 
+ transitive-accessible    method    net/minecraft/class_1972    method_8775    (Ljava/lang/String;)Lnet/minecraft/class_5321;
+\ No newline at end of file

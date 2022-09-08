@@ -1,0 +1,300 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Space Walker <spacedoesrs@gmail.com>
+Date: Thu, 8 Sep 2022 17:41:05 +0200
+Subject: [PATCH] integrate nester
+
+
+diff --git a/build.gradle b/build.gradle
+index d83a18770ef1520b67354843abfb61af6639208f..b8404e6f0349ec4ec7d1fe9096c9ec8ffa2ba42a 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -103,6 +103,9 @@ dependencies {
+ 	// source code remapping
+ 	implementation ('net.fabricmc:mercury:0.2.6')
+ 
++	// nested class fixing
++	implementation 'net.ornithemc:nester:0.2.5'
++
+ 	// Kotlin
+ 	implementation('org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.4.2') {
+ 		transitive = false
+diff --git a/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java b/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java
+index dd871134dd0cd9f83b6bed75f02930de216e99a4..06aae73005c27124014d53e0ac135a75604c9c7d 100644
+--- a/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/api/mappings/intermediate/IntermediateMappingsProvider.java
+@@ -45,8 +45,9 @@ public abstract class IntermediateMappingsProvider implements Named {
+ 	public abstract Property<Function<String, DownloadBuilder>> getDownloader();
+ 
+ 	/**
+-	 * Generate or download a tinyv2 mapping file with calamus and named namespaces.
++	 * Generate or download a tinyv2 mapping file with calamus and named namespaces,
++	 * as well as mappings used by Nester.
+ 	 * @throws IOException
+ 	 */
+-	public abstract void provide(Path tinyMappings) throws IOException;
++	public abstract void provide(Path tinyMappings, Path nestMappings) throws IOException;
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
+index d5f5e431a5b194326e3a4aa74a00d6e087381b4b..0b6c1c0f7876df3d6e55669da00af0a3c5106496 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
+@@ -44,8 +44,8 @@ public abstract class CalamusMappingsProvider extends IntermediateMappingsProvid
+ 	public abstract Property<Boolean> getRefreshDeps();
+ 
+ 	@Override
+-	public void provide(Path tinyMappings) throws IOException {
+-		if (Files.exists(tinyMappings) && !getRefreshDeps().get()) {
++	public void provide(Path tinyMappings, Path nestMappings) throws IOException {
++		if (Files.exists(tinyMappings) && Files.exists(nestMappings) && !getRefreshDeps().get()) {
+ 			return;
+ 		}
+ 
+@@ -57,6 +57,7 @@ public abstract class CalamusMappingsProvider extends IntermediateMappingsProvid
+ 		LOGGER.info("Downloading calamus from {}", url);
+ 
+ 		Files.deleteIfExists(tinyMappings);
++		Files.deleteIfExists(nestMappings);
+ 		Files.deleteIfExists(calamusJarPath);
+ 
+ 		getDownloader().get().apply(url)
+@@ -64,6 +65,7 @@ public abstract class CalamusMappingsProvider extends IntermediateMappingsProvid
+ 				.downloadPath(calamusJarPath);
+ 
+ 		MappingsProviderImpl.extractMappings(calamusJarPath, tinyMappings);
++		MappingsProviderImpl.extractNests(calamusJarPath, nestMappings);
+ 	}
+ 
+ 	@Override
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java
+index fa46c0f54da5a24111515e0b09be23a2d6a93349..ba31b3d4611545f3986195cf7ad9025fd9bb6b73 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/IntermediateMappingsService.java
+@@ -48,12 +48,17 @@ import net.fabricmc.mappingio.adapter.MappingNsCompleter;
+ import net.fabricmc.mappingio.format.Tiny2Reader;
+ import net.fabricmc.mappingio.tree.MemoryMappingTree;
+ 
++import net.ornithemc.nester.mapping.Nests;
++
+ public final class IntermediateMappingsService implements SharedService {
+ 	private final Path calamusTiny;
+ 	private final Supplier<MemoryMappingTree> memoryMappingTree = Suppliers.memoize(this::createMemoryMappingTree);
++	private final Path calamusNest;
++	private final Supplier<Nests> nests = Suppliers.memoize(this::createNests);
+ 
+-	private IntermediateMappingsService(Path calamusTiny) {
++	private IntermediateMappingsService(Path calamusTiny, Path calamusNest) {
+ 		this.calamusTiny = calamusTiny;
++		this.calamusNest = calamusNest;
+ 	}
+ 
+ 	public static synchronized IntermediateMappingsService getInstance(Project project, MinecraftProvider minecraftProvider) {
+@@ -67,12 +72,14 @@ public final class IntermediateMappingsService implements SharedService {
+ 	@VisibleForTesting
+ 	public static IntermediateMappingsService create(IntermediateMappingsProvider intermediateMappingsProvider, MinecraftProvider minecraftProvider) {
+ 		final Path calamusTiny = minecraftProvider.file(intermediateMappingsProvider.getName() + ".tiny").toPath();
++		final Path calamusNest = minecraftProvider.file(intermediateMappingsProvider.getName() + ".nest").toPath();
+ 
+ 		try {
+-			intermediateMappingsProvider.provide(calamusTiny);
++			intermediateMappingsProvider.provide(calamusTiny, calamusNest);
+ 		} catch (IOException e) {
+ 			try {
+ 				Files.deleteIfExists(calamusTiny);
++				Files.deleteIfExists(calamusNest);
+ 			} catch (IOException ex) {
+ 				ex.printStackTrace();
+ 			}
+@@ -80,7 +87,7 @@ public final class IntermediateMappingsService implements SharedService {
+ 			throw new UncheckedIOException("Failed to provide intermediate mappings", e);
+ 		}
+ 
+-		return new IntermediateMappingsService(calamusTiny);
++		return new IntermediateMappingsService(calamusTiny, calamusNest);
+ 	}
+ 
+ 	private MemoryMappingTree createMemoryMappingTree() {
+@@ -99,6 +106,10 @@ public final class IntermediateMappingsService implements SharedService {
+ 		return tree;
+ 	}
+ 
++	private Nests createNests() {
++		return Nests.of(calamusNest);
++	}
++
+ 	public MemoryMappingTree getMemoryMappingTree() {
+ 		return memoryMappingTree.get();
+ 	}
+@@ -106,4 +117,12 @@ public final class IntermediateMappingsService implements SharedService {
+ 	public Path getCalamusTiny() {
+ 		return Objects.requireNonNull(calamusTiny, "Calamus mappings have not been setup");
+ 	}
++
++	public Nests getNests() {
++		return nests.get();
++	}
++
++	public Path getCalamusNest() {
++		return calamusNest;
++	}
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
+index cd451415af326969b7b09ac73aa2e70070263fbe..14224ffb8cf37553273ebf6aa9faf6ac73b16271 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
+@@ -31,4 +31,6 @@ public interface MappingsProvider {
+ 	Path mappingsWorkingDir();
+ 
+ 	File calamusTinyFile();
++
++	File calamusNestFile();
+ }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
+index f5ae9be6944b9d11bbab30f084ab6880971fdb2b..977b948a21f63eebc3db4eaf0f6f816aac204ea0 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
+@@ -66,10 +66,14 @@ import net.fabricmc.mappingio.tree.MemoryMappingTree;
+ import net.fabricmc.stitch.Command;
+ import net.fabricmc.stitch.commands.CommandProposeFieldNames;
+ 
++import net.ornithemc.nester.mapping.Nests;
++
+ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 	private static final Logger LOGGER = LoggerFactory.getLogger(MappingsProviderImpl.class);
+ 
+ 	private Supplier<MemoryMappingTree> mappingTree;
++	private Supplier<Nests> nests;
++
+ 	public final String mappingsIdentifier;
+ 
+ 	private final Path mappingsWorkingDir;
+@@ -109,6 +113,10 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		return Objects.requireNonNull(mappingTree, "Cannot get mappings before they have been read").get();
+ 	}
+ 
++	public Nests getNests() {
++		return Objects.requireNonNull(nests, "Cannot get nests before they have been read").get();
++	}
++
+ 	private static MappingsProviderImpl create(DependencyInfo dependency, MinecraftProvider minecraftProvider, Supplier<IntermediateMappingsService> calamusService) {
+ 		final String version = dependency.getResolvedVersion();
+ 		final Path inputJar = dependency.resolveFile().orElseThrow(() -> new RuntimeException("Could not resolve mappings: " + dependency)).toPath();
+@@ -155,6 +163,7 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		}
+ 
+ 		mappingTree = Suppliers.memoize(this::readMappings);
++		nests = Suppliers.memoize(this::readNests);
+ 	}
+ 
+ 	public void applyToProject(Project project, DependencyInfo dependency) {
+@@ -217,6 +226,10 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		}
+ 	}
+ 
++	private Nests readNests() {
++		return calamusService.get().getNests();
++	}
++
+ 	private static boolean areMappingsV2(Path path) throws IOException {
+ 		try (BufferedReader reader = Files.newBufferedReader(path)) {
+ 			return MappingReader.detectFormat(reader) == MappingFormat.TINY_2;
+@@ -233,6 +246,20 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		Files.copy(jar.getPath("mappings/mappings.tiny"), extractTo, StandardCopyOption.REPLACE_EXISTING);
+ 	}
+ 
++	public static void extractNests(Path jar, Path extractTo) throws IOException {
++		try (FileSystemUtil.Delegate delegate = FileSystemUtil.getJarFileSystem(jar)) {
++			extractNests(delegate.fs(), extractTo);
++		}
++	}
++
++	public static void extractNests(FileSystem jar, Path extractTo) throws IOException {
++		Path p = jar.getPath("mappings/mappings.nest");
++
++		if (Files.exists(p)) {
++			Files.copy(p, extractTo, StandardCopyOption.REPLACE_EXISTING);
++		}
++	}
++
+ 	private void extractExtras(FileSystem jar) throws IOException {
+ 		extractUnpickDefinitions(jar);
+ 		extractSignatureFixes(jar);
+@@ -336,6 +363,11 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+ 		return calamusService.get().getCalamusTiny().toFile();
+ 	}
+ 
++	@Override
++	public File calamusNestFile() {
++		return calamusService.get().getCalamusNest().toFile();
++	}
++
+ 	private static String createMappingsIdentifier(String mappingsName, String version, String classifier, String minecraftVersion) {
+ 		//          mappingsName      . mcVersion . version        classifier
+ 		// Example: net.fabricmc.yarn . 1_16_5    . 1.16.5+build.5 -v2
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
+index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..45d10d3ee14d55227d111f978d774a848dfbf674 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
+@@ -40,7 +40,7 @@ public abstract class NoOpIntermediateMappingsProvider extends IntermediateMappi
+ 	private static final String HEADER = "tiny\t2\t0\tofficial\tcalamus";
+ 
+ 	@Override
+-	public void provide(Path tinyMappings) throws IOException {
++	public void provide(Path tinyMappings, Path nestMappings) throws IOException {
+ 		Files.writeString(tinyMappings, HEADER, StandardCharsets.UTF_8);
+ 	}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
+index eed9df341fb2d7bf3ae13503ef881abde2647864..b178c9c11c722b0a1d2fbecca8f5e19f68a22cd1 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
++++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
+@@ -27,6 +27,7 @@ package net.fabricmc.loom.configuration.providers.minecraft.mapped;
+ import java.io.IOException;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
++import java.nio.file.Paths;
+ import java.util.Collections;
+ import java.util.List;
+ import java.util.Map;
+@@ -43,6 +44,8 @@ import net.fabricmc.loom.util.TinyRemapperHelper;
+ import net.fabricmc.tinyremapper.OutputConsumerPath;
+ import net.fabricmc.tinyremapper.TinyRemapper;
+ 
++import net.ornithemc.nester.Nester;
++
+ public abstract class AbstractMappedMinecraftProvider<M extends MinecraftProvider> implements MappedMinecraftProvider.ProviderImpl {
+ 	protected final M minecraftProvider;
+ 	private final Project project;
+@@ -130,6 +133,20 @@ public abstract class AbstractMappedMinecraftProvider<M extends MinecraftProvide
+ 
+ 		Files.deleteIfExists(remappedJars.outputJar());
+ 
++		Path nestedJar;
++
++		if (mappingsProvider.getNests().get().isEmpty()) {
++			nestedJar = remappedJars.inputJar();
++		} else {
++			String input = remappedJars.inputJar().toString();
++			String extension = ".jar";
++
++			String nested = input.substring(0, input.length() - extension.length()) + "-nested" + extension;
++			nestedJar = Paths.get(nested);
++
++			Nester.fixJar(remappedJars.inputJar(), nestedJar, mappingsProvider.getNests());
++		}
++
+ 		final Map<String, String> remappedSignatures = SignatureFixerApplyVisitor.getRemappedSignatures(getTargetNamespace() == MappingsNamespace.CALAMUS, mappingsProvider, project, toM);
+ 		TinyRemapper remapper = TinyRemapperHelper.getTinyRemapper(project, fromM, toM, true, (builder) -> {
+ 			builder.extraPostApplyVisitor(new SignatureFixerApplyVisitor(remappedSignatures));
+@@ -144,10 +161,10 @@ public abstract class AbstractMappedMinecraftProvider<M extends MinecraftProvide
+ 				remapper.readClassPath(path);
+ 			}
+ 
+-			remapper.readInputs(remappedJars.inputJar());
++			remapper.readInputs(nestedJar);
+ 			remapper.apply(outputConsumer);
+ 		} catch (Exception e) {
+-			throw new RuntimeException("Failed to remap JAR " + remappedJars.inputJar() + " with mappings from " + mappingsProvider.tinyMappings, e);
++			throw new RuntimeException("Failed to remap JAR " + nestedJar + " with mappings from " + mappingsProvider.tinyMappings, e);
+ 		} finally {
+ 			remapper.finish();
+ 		}

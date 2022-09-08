@@ -1,0 +1,233 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Space Walker <spacedoesrs@gmail.com>
+Date: Thu, 8 Sep 2022 17:20:49 +0200
+Subject: [PATCH] rebrand to ornithe
+
+
+diff --git a/build.gradle b/build.gradle
+index d8e601509b71f224347c502931e63106c57491a5..d83a18770ef1520b67354843abfb61af6639208f 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -28,7 +28,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+ 	}
+ }
+ 
+-group = 'net.fabricmc'
++group = 'net.ornithemc'
+ archivesBaseName = project.name
+ def baseVersion = '1.0'
+ 
+@@ -40,6 +40,10 @@ if (ENV.BUILD_NUMBER) {
+ }
+ 
+ repositories {
++	maven {
++		name = 'Ornithe'
++		url = 'https://maven.ornithemc.net/releases'
++	}
+ 	maven {
+ 		name = 'Fabric'
+ 		url = 'https://maven.fabricmc.net/'
+@@ -169,8 +173,8 @@ codenarc {
+ 
+ gradlePlugin {
+ 	plugins {
+-		fabricLoom {
+-			id = 'fabric-loom'
++		ornitheLoom {
++			id = 'ornithe-loom'
+ 			implementationClass = 'net.fabricmc.loom.bootstrap.LoomGradlePluginBootstrap'
+ 		}
+ 	}
+@@ -226,8 +230,8 @@ publishing {
+ 
+ 		// Manually crate the plugin marker for snapshot versions
+ 		snapshotPlugin(MavenPublication) { publication ->
+-			groupId 'fabric-loom'
+-			artifactId 'fabric-loom.gradle.plugin'
++			groupId 'ornithe-loom'
++			artifactId 'ornithe-loom.gradle.plugin'
+ 			version baseVersion + '-SNAPSHOT'
+ 
+ 			pom.withXml({
+@@ -237,9 +241,9 @@ publishing {
+ 				Node dependencies = root.appendChild(document.createElement('dependencies'))
+ 				Node dependency = dependencies.appendChild(document.createElement('dependency'))
+ 				Node groupId = dependency.appendChild(document.createElement('groupId'))
+-				groupId.setTextContent('net.fabricmc')
++				groupId.setTextContent('net.ornithemc')
+ 				Node artifactId = dependency.appendChild(document.createElement('artifactId'))
+-				artifactId.setTextContent('fabric-loom')
++				artifactId.setTextContent('ornithe-loom')
+ 				Node version = dependency.appendChild(document.createElement('version'))
+ 				version.setTextContent(baseVersion + '-SNAPSHOT')
+ 			})
+diff --git a/checkstyle.xml b/checkstyle.xml
+index e8844859b78e491d8cde25792e655e11c13f162f..c42227a9ccac895a53b9aa625be8c558156ba8fb 100644
+--- a/checkstyle.xml
++++ b/checkstyle.xml
+@@ -66,7 +66,7 @@
+ 		<module name="UnusedImports"/>
+ 
+ 		<module name="ImportOrder">
+-			<property name="groups" value="java,javax,*,net.minecraft,net.fabricmc"/>
++			<property name="groups" value="java,javax,*,net.minecraft,net.fabricmc,net.ornithemc"/>
+ 			<property name="ordered" value="false"/><!-- the plugin orders alphabetically without considering separators.. -->
+ 			<property name="separated" value="true"/>
+ 			<property name="option" value="top"/>
+diff --git a/gradle.properties b/gradle.properties
+index 31014b156127886c44921900f480e68d4528da25..c97752d62dd63eed432118e0ac205cf184972b7b 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -1,5 +1,5 @@
+-name = fabric-loom
+-description = The Gradle plugin for Fabric
+-url = https://github.com/FabricMC/fabric-loom
++name = ornithe-loom
++description = The Gradle plugin for Ornithe
++url = https://github.com/OrnitheMC/ornithe-loom
+ 
+ kotlin.stdlib.default.dependency = false
+\ No newline at end of file
+diff --git a/src/main/java/net/fabricmc/loom/LoomGradlePlugin.java b/src/main/java/net/fabricmc/loom/LoomGradlePlugin.java
+index a75b67fcbd76a74b9e6f4786dd5bc5e19690790b..b9fe8ed88db45bb70866ec69145dc544a1dea60c 100644
+--- a/src/main/java/net/fabricmc/loom/LoomGradlePlugin.java
++++ b/src/main/java/net/fabricmc/loom/LoomGradlePlugin.java
+@@ -62,7 +62,7 @@ public class LoomGradlePlugin implements BootstrappedPlugin {
+ 	}
+ 
+ 	public void apply(Project project) {
+-		project.getLogger().lifecycle("Fabric Loom: " + LOOM_VERSION);
++		project.getLogger().lifecycle("Ornithe Loom: " + LOOM_VERSION);
+ 		LibraryLocationLogger.logLibraryVersions();
+ 
+ 		// Apply default plugins
+diff --git a/src/main/java/net/fabricmc/loom/LoomRepositoryPlugin.java b/src/main/java/net/fabricmc/loom/LoomRepositoryPlugin.java
+index c0da3e8dabbd1a3419ca12a66ffc5f9652ccd1dc..43f0d3bef57e3ea89f868c1a2f9672e4e1563469 100644
+--- a/src/main/java/net/fabricmc/loom/LoomRepositoryPlugin.java
++++ b/src/main/java/net/fabricmc/loom/LoomRepositoryPlugin.java
+@@ -66,6 +66,10 @@ public class LoomRepositoryPlugin implements Plugin<PluginAware> {
+ 			repo.setName("UserLocalRemappedMods");
+ 			repo.setUrl(files.getRemappedModCache());
+ 		});
++		repositories.maven(repo -> {
++			repo.setName("Ornithe");
++			repo.setUrl(MirrorUtil.getOrnitheRepository(target));
++		});
+ 		repositories.maven(repo -> {
+ 			repo.setName("Fabric");
+ 			repo.setUrl(MirrorUtil.getFabricRepository(target));
+diff --git a/src/main/java/net/fabricmc/loom/configuration/LoomDependencyManager.java b/src/main/java/net/fabricmc/loom/configuration/LoomDependencyManager.java
+index 22ce5a3cadb2c63f3a6af65743070b5989bb8b2b..aa1422e0387e617d58521d130aa4833bfafbe6d3 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/LoomDependencyManager.java
++++ b/src/main/java/net/fabricmc/loom/configuration/LoomDependencyManager.java
+@@ -83,7 +83,7 @@ public class LoomDependencyManager {
+ 		sourceRemapper.remapAll();
+ 
+ 		if (extension.getInstallerData() == null) {
+-			project.getLogger().warn("fabric-installer.json not found in classpath!");
++			project.getLogger().warn("ornithe-installer.json not found in classpath!");
+ 		}
+ 
+ 		for (Runnable runnable : afterTasks) {
+@@ -93,7 +93,7 @@ public class LoomDependencyManager {
+ 
+ 	public static JsonObject readInstallerJson(File file) {
+ 		try {
+-			byte[] bytes = ZipUtils.unpackNullable(file.toPath(), "fabric-installer.json");
++			byte[] bytes = ZipUtils.unpackNullable(file.toPath(), "ornithe-installer.json");
+ 
+ 			if (bytes == null) {
+ 				return null;
+diff --git a/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java b/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java
+index 16752f5d1723e4b2b184a3df76bfd8d4cccfc6db..64084aeac64d0a4a490ec18e8166a428bf0e21bc 100644
+--- a/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java
++++ b/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java
+@@ -50,7 +50,7 @@ public abstract class LoomFilesBaseImpl implements LoomFiles {
+ 
+ 	@Override
+ 	public File getUserCache() {
+-		return createFile(getGradleUserHomeDir(), "caches" + File.separator + "fabric-loom");
++		return createFile(getGradleUserHomeDir(), "caches" + File.separator + "ornithe-loom");
+ 	}
+ 
+ 	@Override
+diff --git a/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java b/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java
+index 30b1ea0fb56e2c313a76ac7a689e88ac1db304cd..022c7cafba823777a213b602ec1ba45a1503b6a5 100644
+--- a/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java
++++ b/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java
+@@ -88,7 +88,7 @@ public final class SourceRemapperService implements SharedService {
+ 		// Create a temp directory with all of the sources
+ 		if (!Files.isDirectory(source)) {
+ 			isSrcTmp = true;
+-			srcPath = Files.createTempDirectory("fabric-loom-src");
++			srcPath = Files.createTempDirectory("ornithe-loom-src");
+ 			ZipUtils.unpackAll(source, srcPath);
+ 		}
+ 
+diff --git a/src/main/java/net/fabricmc/loom/util/Constants.java b/src/main/java/net/fabricmc/loom/util/Constants.java
+index f5e694ea750ab9b3c67a2946146cd105908ecc8c..de21aa9f24bf2459ba397baa78ecb2289bef5ba8 100644
+--- a/src/main/java/net/fabricmc/loom/util/Constants.java
++++ b/src/main/java/net/fabricmc/loom/util/Constants.java
+@@ -32,6 +32,7 @@ public class Constants {
+ 	public static final String RESOURCES_BASE = "https://resources.download.minecraft.net/";
+ 	public static final String VERSION_MANIFESTS = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+ 	public static final String EXPERIMENTAL_VERSIONS = "https://maven.fabricmc.net/net/minecraft/experimental_versions.json";
++	public static final String ORNITHE_REPOSITORY = "https://maven.ornithemc.net/releases";
+ 	public static final String FABRIC_REPOSITORY = "https://maven.fabricmc.net/";
+ 
+ 	public static final int ASM_VERSION = Opcodes.ASM9;
+diff --git a/src/main/java/net/fabricmc/loom/util/MirrorUtil.java b/src/main/java/net/fabricmc/loom/util/MirrorUtil.java
+index 3350a985f73e403f086a2a988283cbe4644d0cc2..a5191f7e8a5bd23cc0b1e7b69df49066afae29fb 100644
+--- a/src/main/java/net/fabricmc/loom/util/MirrorUtil.java
++++ b/src/main/java/net/fabricmc/loom/util/MirrorUtil.java
+@@ -59,6 +59,14 @@ public class MirrorUtil {
+ 		return Constants.EXPERIMENTAL_VERSIONS;
+ 	}
+ 
++	public static String getOrnitheRepository(ExtensionAware aware) {
++		if (aware.getExtensions().getExtraProperties().has("loom_ornithe_repository")) {
++			return String.valueOf(aware.getExtensions().getExtraProperties().get("loom_ornithe_repository"));
++		}
++
++		return Constants.ORNITHE_REPOSITORY;
++	}
++
+ 	public static String getFabricRepository(ExtensionAware aware) {
+ 		if (aware.getExtensions().getExtraProperties().has("loom_fabric_repository")) {
+ 			return String.valueOf(aware.getExtensions().getExtraProperties().get("loom_fabric_repository"));
+diff --git a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java b/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
+index 4c069aea7852903f862a87b4da5d78b8237e7a46..4d4a06ac1ddd61773ed5580491df09bec0780995 100644
+--- a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
++++ b/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
+@@ -122,7 +122,7 @@ public class SourceRemapper {
+ 		if (!source.isDirectory()) {
+ 			// create tmp directory
+ 			isSrcTmp = true;
+-			srcPath = Files.createTempDirectory("fabric-loom-src");
++			srcPath = Files.createTempDirectory("ornithe-loom-src");
+ 			ZipUtils.unpackAll(source.toPath(), srcPath);
+ 		}
+ 
+diff --git a/src/test/groovy/net/fabricmc/loom/test/util/GradleProjectTestTrait.groovy b/src/test/groovy/net/fabricmc/loom/test/util/GradleProjectTestTrait.groovy
+index c3dd4727a11158f712445f9910d78a09c2e397c2..7e06ca40fd8a9a3e168c2aee68c068c9c5e2eb9d 100644
+--- a/src/test/groovy/net/fabricmc/loom/test/util/GradleProjectTestTrait.groovy
++++ b/src/test/groovy/net/fabricmc/loom/test/util/GradleProjectTestTrait.groovy
+@@ -47,7 +47,7 @@ trait GradleProjectTestTrait {
+         File gradleHomeDir = options.gradleHomeDir as File ?: options.sharedFiles ? sharedGradleHomeDir : File.createTempDir()
+ 
+ 		// Useful for faster local testing.
+-		def homeDirOverride = System.getProperty("fabric.loom.test.homeDir")
++		def homeDirOverride = System.getProperty("ornithe.loom.test.homeDir")
+ 
+ 		if (homeDirOverride) {
+ 			gradleHomeDir = new File(homeDirOverride)
+@@ -243,7 +243,7 @@ trait GradleProjectTestTrait {
+         }
+ 
+         File getGeneratedSources(String mappings) {
+-            return new File(getGradleHomeDir(), "caches/fabric-loom/${mappings}/minecraft-merged-named-sources.jar")
++            return new File(getGradleHomeDir(), "caches/ornithe-loom/${mappings}/minecraft-merged-named-sources.jar")
+         }
+ 
+         File getGeneratedLocalSources(String mappings) {
