@@ -279,7 +279,7 @@ index da82d8f1d3fd02c6197a15e765765390217cab90..2de08db76cf209c47c2e5e433ad51f4e
  
  		for (AccessWidenerFile accessWidener : accessWideners) {
 diff --git a/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java b/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
-index 033211390944bb090942ed7d8f167bacb244e158..da192b332b633d5f92d85e4816e4ab28cd9c7277 100644
+index 51cb5189c3a90ea93041455d395dd7146c18cab0..dad50cdc18d217ead4ae153aa3d38fd7feb7c04e 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
 @@ -108,7 +108,7 @@ public class InterfaceInjectionProcessor implements JarProcessor, GenerateSource
@@ -380,7 +380,7 @@ index a5998ff8cb7c47ccfc2bd8b697771f85855896e7..bdda13e57248cf06358873d3dea225a7
  		}
  
 diff --git a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
-index b06447fe6660f3664a2febcdde0897840e15df33..100d8be779b35c8326f3589383c16530be96f0bf 100644
+index 1fc7a69e5fdd571cced32985bf6eb58da950585c..2b76e617478722000aaf98168d84c5a4ef9df96c 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
 @@ -142,8 +142,8 @@ public final class ModJavadocProcessor implements JarProcessor, GenerateSourcesT
@@ -1243,7 +1243,7 @@ index 8077cd35bd12af577d2bea517b6192008d3b7f4d..ffa0e2c7c3f838fe03c89930cba08e23
  		}
  
 diff --git a/src/main/java/net/fabricmc/loom/util/Constants.java b/src/main/java/net/fabricmc/loom/util/Constants.java
-index 92b948fb6e5f18e625ffcfc224177a3b358ffb6b..40426f5e770925f7c20afcdd765b7181363267f7 100644
+index 7266f4fad4527933cc279db81ddb38fa6f3d4ec0..06b6990cc1be3576820b61a82575f98c74a1d936 100644
 --- a/src/main/java/net/fabricmc/loom/util/Constants.java
 +++ b/src/main/java/net/fabricmc/loom/util/Constants.java
 @@ -107,8 +107,8 @@ public class Constants {

@@ -229,6 +229,32 @@ index 379c421005b90a7e4793451a60edf69368d5e1be..0589ce91e5dd91849d2492d0bc9c987d
  		runConfig.environmentVariables = new HashMap<>();
  		runConfig.environmentVariables.putAll(settings.getEnvironmentVariables());
  		runConfig.projectName = project.getName();
+diff --git a/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java b/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
+index 033211390944bb090942ed7d8f167bacb244e158..51cb5189c3a90ea93041455d395dd7146c18cab0 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/ifaceinject/InterfaceInjectionProcessor.java
+@@ -271,7 +271,7 @@ public class InterfaceInjectionProcessor implements JarProcessor, GenerateSource
+ 		 * Reads the injected interfaces contained in a mod jar, or returns empty if there is none.
+ 		 */
+ 		public static List<InjectedInterface> fromModJar(Path modJarPath) {
+-			final JsonObject jsonObject = ModUtils.getFabricModJson(modJarPath);
++			final JsonObject jsonObject = ModUtils.getOrnitheModJson(modJarPath);
+ 
+ 			if (jsonObject == null) {
+ 				return Collections.emptyList();
+diff --git a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
+index b06447fe6660f3664a2febcdde0897840e15df33..1fc7a69e5fdd571cced32985bf6eb58da950585c 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
++++ b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
+@@ -121,7 +121,7 @@ public final class ModJavadocProcessor implements JarProcessor, GenerateSourcesT
+ 	public record ModJavadoc(String modId, MemoryMappingTree mappingTree) {
+ 		@Nullable
+ 		public static ModJavadoc fromModJar(Path path) throws IOException {
+-			JsonObject jsonObject = ModUtils.getFabricModJson(path);
++			JsonObject jsonObject = ModUtils.getOrnitheModJson(path);
+ 
+ 			if (jsonObject == null || !jsonObject.has("custom")) {
+ 				return null;
 diff --git a/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java b/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java
 index 16752f5d1723e4b2b184a3df76bfd8d4cccfc6db..64084aeac64d0a4a490ec18e8166a428bf0e21bc 100644
 --- a/src/main/java/net/fabricmc/loom/extension/LoomFilesBaseImpl.java
@@ -242,6 +268,29 @@ index 16752f5d1723e4b2b184a3df76bfd8d4cccfc6db..64084aeac64d0a4a490ec18e8166a428
  	}
  
  	@Override
+diff --git a/src/main/java/net/fabricmc/loom/task/RemapJarTask.java b/src/main/java/net/fabricmc/loom/task/RemapJarTask.java
+index 5fc7a01f24dcd788c7feac507c3b3f5f984c8a26..3b10647a94cd8e78b74a7e850ffe0455b7db1196 100644
+--- a/src/main/java/net/fabricmc/loom/task/RemapJarTask.java
++++ b/src/main/java/net/fabricmc/loom/task/RemapJarTask.java
+@@ -138,14 +138,14 @@ public abstract class RemapJarTask extends AbstractRemapJarTask {
+ 		final LoomGradleExtension extension = LoomGradleExtension.get(getProject());
+ 		final MixinExtension mixinExtension = extension.getMixin();
+ 
+-		final JsonObject fabricModJson = ModUtils.getFabricModJson(getInputFile().getAsFile().get().toPath());
++		final JsonObject ornitheModJson = ModUtils.getOrnitheModJson(getInputFile().getAsFile().get().toPath());
+ 
+-		if (fabricModJson == null) {
+-			getProject().getLogger().warn("Could not find fabric.mod.json file in: " + getInputFile().getAsFile().get().getName());
++		if (ornitheModJson == null) {
++			getProject().getLogger().warn("Could not find ornithe.mod.json file in: " + getInputFile().getAsFile().get().getName());
+ 			return;
+ 		}
+ 
+-		final Collection<String> allMixinConfigs = MixinRefmapHelper.getMixinConfigurationFiles(fabricModJson);
++		final Collection<String> allMixinConfigs = MixinRefmapHelper.getMixinConfigurationFiles(ornitheModJson);
+ 
+ 		for (SourceSet sourceSet : mixinExtension.getMixinSourceSets()) {
+ 			MixinExtension.MixinInformationContainer container = Objects.requireNonNull(
 diff --git a/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java b/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java
 index 49a6b1c12d71c1a7f2c235765a1cbcb3b23082e1..a9841c3c99acd2e3e3a4848449591253803817ec 100644
 --- a/src/main/java/net/fabricmc/loom/task/launch/GenerateDLIConfigTask.java
@@ -295,6 +344,46 @@ index fc249bbad90c9e937e79c4a7dd073cfbf0163d52..fad9cc361a31b399bd86506940f96c78
  			Files.deleteIfExists(outputFile);
  			Files.copy(is, outputFile);
  		} catch (IOException e) {
+diff --git a/src/main/java/net/fabricmc/loom/task/service/JarManifestService.java b/src/main/java/net/fabricmc/loom/task/service/JarManifestService.java
+index 117207fad877e429d9b560e3746b3941171687de..61d2279e32554a16b2b21145300a97311350c16d 100644
+--- a/src/main/java/net/fabricmc/loom/task/service/JarManifestService.java
++++ b/src/main/java/net/fabricmc/loom/task/service/JarManifestService.java
+@@ -50,7 +50,7 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
+ 		Property<String> getMCEVersion();
+ 		Property<String> getMinecraftVersion();
+ 		Property<String> getTinyRemapperVersion();
+-		Property<String> getFabricLoaderVersion();
++		Property<String> getOrnitheLoaderVersion();
+ 		Property<MixinVersion> getMixinVersion();
+ 	}
+ 
+@@ -65,7 +65,7 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
+ 				params.getMCEVersion().set(Constants.Dependencies.Versions.MIXIN_COMPILE_EXTENSIONS);
+ 				params.getMinecraftVersion().set(extension.getMinecraftProvider().minecraftVersion());
+ 				params.getTinyRemapperVersion().set(tinyRemapperVersion.orElse("unknown"));
+-				params.getFabricLoaderVersion().set(getLoaderVersion(project).orElse("unknown"));
++				params.getOrnitheLoaderVersion().set(getLoaderVersion(project).orElse("unknown"));
+ 				params.getMixinVersion().set(getMixinVersion(project).orElse(new MixinVersion("unknown", "unknown")));
+ 			});
+ 		});
+@@ -85,7 +85,7 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
+ 		attributes.putValue("Fabric-Mixin-Compile-Extensions-Version", p.getMCEVersion().get());
+ 		attributes.putValue("Fabric-Minecraft-Version", p.getMinecraftVersion().get());
+ 		attributes.putValue("Fabric-Tiny-Remapper-Version", p.getTinyRemapperVersion().get());
+-		attributes.putValue("Fabric-Loader-Version", p.getFabricLoaderVersion().get());
++		attributes.putValue("Ornithe-Loader-Version", p.getOrnitheLoaderVersion().get());
+ 
+ 		// This can be overridden by mods if required
+ 		if (!attributes.containsKey("Fabric-Mixin-Version")) {
+@@ -102,7 +102,7 @@ public abstract class JarManifestService implements BuildService<JarManifestServ
+ 		LoomGradleExtension extension = LoomGradleExtension.get(project);
+ 
+ 		if (extension.getInstallerData() == null) {
+-			project.getLogger().warn("Could not determine fabric loader version for jar manifest");
++			project.getLogger().warn("Could not determine ornithe loader version for jar manifest");
+ 			return Optional.empty();
+ 		}
+ 
 diff --git a/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java b/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java
 index 30b1ea0fb56e2c313a76ac7a689e88ac1db304cd..022c7cafba823777a213b602ec1ba45a1503b6a5 100644
 --- a/src/main/java/net/fabricmc/loom/task/service/SourceRemapperService.java
@@ -309,7 +398,7 @@ index 30b1ea0fb56e2c313a76ac7a689e88ac1db304cd..022c7cafba823777a213b602ec1ba45a
  		}
  
 diff --git a/src/main/java/net/fabricmc/loom/util/Constants.java b/src/main/java/net/fabricmc/loom/util/Constants.java
-index f5e694ea750ab9b3c67a2946146cd105908ecc8c..92b948fb6e5f18e625ffcfc224177a3b358ffb6b 100644
+index f5e694ea750ab9b3c67a2946146cd105908ecc8c..7266f4fad4527933cc279db81ddb38fa6f3d4ec0 100644
 --- a/src/main/java/net/fabricmc/loom/util/Constants.java
 +++ b/src/main/java/net/fabricmc/loom/util/Constants.java
 @@ -32,6 +32,7 @@ public class Constants {
@@ -320,20 +409,24 @@ index f5e694ea750ab9b3c67a2946146cd105908ecc8c..92b948fb6e5f18e625ffcfc224177a3b
  	public static final String FABRIC_REPOSITORY = "https://maven.fabricmc.net/";
  
  	public static final int ASM_VERSION = Opcodes.ASM9;
-@@ -82,7 +83,7 @@ public class Constants {
+@@ -81,8 +82,8 @@ public class Constants {
+ 	 * Constants related to dependencies.
  	 */
  	public static final class Dependencies {
- 		public static final String MIXIN_COMPILE_EXTENSIONS = "net.fabricmc:fabric-mixin-compile-extensions:";
+-		public static final String MIXIN_COMPILE_EXTENSIONS = "net.fabricmc:fabric-mixin-compile-extensions:";
 -		public static final String DEV_LAUNCH_INJECTOR = "net.fabricmc:dev-launch-injector:";
++		public static final String MIXIN_COMPILE_EXTENSIONS = "net.ornithemc:ornithe-mixin-compile-extensions:";
 +		public static final String DEV_LAUNCH_INJECTOR = "net.ornithemc:dev-launch-injector:";
  		public static final String TERMINAL_CONSOLE_APPENDER = "net.minecrell:terminalconsoleappender:";
  		public static final String JETBRAINS_ANNOTATIONS = "org.jetbrains:annotations:";
  		public static final String NATIVE_SUPPORT = "net.fabricmc:fabric-loom-native-support:";
-@@ -95,7 +96,7 @@ public class Constants {
+@@ -94,8 +95,8 @@ public class Constants {
+ 		 * Constants for versions of dependencies.
  		 */
  		public static final class Versions {
- 			public static final String MIXIN_COMPILE_EXTENSIONS = "0.5.0";
+-			public static final String MIXIN_COMPILE_EXTENSIONS = "0.5.0";
 -			public static final String DEV_LAUNCH_INJECTOR = "0.2.1+build.8";
++			public static final String MIXIN_COMPILE_EXTENSIONS = "0.1.0";
 +			public static final String DEV_LAUNCH_INJECTOR = "0.1.0";
  			public static final String TERMINAL_CONSOLE_APPENDER = "1.2.0";
  			public static final String JETBRAINS_ANNOTATIONS = "23.0.0";
@@ -368,6 +461,30 @@ index 3350a985f73e403f086a2a988283cbe4644d0cc2..a5191f7e8a5bd23cc0b1e7b69df49066
  	public static String getFabricRepository(ExtensionAware aware) {
  		if (aware.getExtensions().getExtraProperties().has("loom_fabric_repository")) {
  			return String.valueOf(aware.getExtensions().getExtraProperties().get("loom_fabric_repository"));
+diff --git a/src/main/java/net/fabricmc/loom/util/ModUtils.java b/src/main/java/net/fabricmc/loom/util/ModUtils.java
+index 31298d953d72849b38f9a41b3f5bbbb565a81397..1b40fd2ac1f2b865b8a0d9ad1f4d4c670e6dadf5 100644
+--- a/src/main/java/net/fabricmc/loom/util/ModUtils.java
++++ b/src/main/java/net/fabricmc/loom/util/ModUtils.java
+@@ -41,15 +41,15 @@ public final class ModUtils {
+ 	}
+ 
+ 	public static boolean isMod(Path input) {
+-		return ZipUtils.contains(input, "fabric.mod.json");
++		return ZipUtils.contains(input, "ornithe.mod.json");
+ 	}
+ 
+ 	@Nullable
+-	public static JsonObject getFabricModJson(Path path) {
++	public static JsonObject getOrnitheModJson(Path path) {
+ 		try {
+-			return ZipUtils.unpackGsonNullable(path, "fabric.mod.json", JsonObject.class);
++			return ZipUtils.unpackGsonNullable(path, "ornithe.mod.json", JsonObject.class);
+ 		} catch (IOException e) {
+-			throw new UncheckedIOException("Failed to extract fabric.mod.json from " + path, e);
++			throw new UncheckedIOException("Failed to extract ornithe.mod.json from " + path, e);
+ 		}
+ 	}
+ }
 diff --git a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java b/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
 index 4c069aea7852903f862a87b4da5d78b8237e7a46..4d4a06ac1ddd61773ed5580491df09bec0780995 100644
 --- a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
