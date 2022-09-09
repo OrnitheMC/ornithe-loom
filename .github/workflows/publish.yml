@@ -17,6 +17,8 @@ jobs:
         with:
           token: ${{ secrets.github_token }}
           prefix: ${{ github.ref }}
+      - run: git config --global user.email "nobody@example.com"
+      - run: git config --global user.name "Nobody"
       - name: setup jdk
         uses: actions/setup-java@v1
         with:
