@@ -5,7 +5,7 @@ Subject: [PATCH] integrate nester
 
 
 diff --git a/build.gradle b/build.gradle
-index b8a2763b2dd26377438657465a6abd71853fdc0b..63c026bf01a95979d3b196c3b8f07be5005af4d6 100644
+index c960945d2fb6f6452cad5864f509eb18fcc95a8a..ad0572b83463e1fc6164f66ea86e12b88ec43678 100644
 --- a/build.gradle
 +++ b/build.gradle
 @@ -103,6 +103,9 @@ dependencies {

@@ -18,7 +18,7 @@ index 804f486b753249b41cc33e7b1d48260c73a91391..3f0ecaf618e34fdf65b2b985d86cdfb3
  			} else {
  				project.getLogger().lifecycle("Loom environment validation disabled. Please re-enable before reporting any issues.");
 diff --git a/build.gradle b/build.gradle
-index d8e601509b71f224347c502931e63106c57491a5..b8a2763b2dd26377438657465a6abd71853fdc0b 100644
+index d8e601509b71f224347c502931e63106c57491a5..c960945d2fb6f6452cad5864f509eb18fcc95a8a 100644
 --- a/build.gradle
 +++ b/build.gradle
 @@ -28,7 +28,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -41,6 +41,15 @@ index d8e601509b71f224347c502931e63106c57491a5..b8a2763b2dd26377438657465a6abd71
  	maven {
  		name = 'Fabric'
  		url = 'https://maven.fabricmc.net/'
+@@ -79,7 +83,7 @@ dependencies {
+ 	implementation ('org.ow2.asm:asm-util:9.3')
+ 
+ 	// game handling utils
+-	implementation ('net.fabricmc:stitch:0.6.2') {
++	implementation ('net.ornithemc:stitch:0.7.6') {
+ 		exclude module: 'enigma'
+ 	}
+ 
 @@ -169,8 +173,8 @@ codenarc {
  
  gradlePlugin {
@@ -303,6 +312,23 @@ index 16752f5d1723e4b2b184a3df76bfd8d4cccfc6db..64084aeac64d0a4a490ec18e8166a428
  	}
  
  	@Override
+diff --git a/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java b/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
+index 053d8ec54e54d760ef03e57ddd818f3718f292b3..c14d83b54cd1d055b3fc4370da6ccb1d9ad68301 100644
+--- a/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
++++ b/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
+@@ -62,9 +62,9 @@ import net.fabricmc.loom.util.ZipUtils;
+ 
+ public abstract class AbstractRemapJarTask extends Jar {
+ 	public static final String MANIFEST_PATH = "META-INF/MANIFEST.MF";
+-	public static final String MANIFEST_NAMESPACE_KEY = "Fabric-Mapping-Namespace";
+-	public static final String MANIFEST_SPLIT_ENV_KEY = "Fabric-Loom-Split-Environment";
+-	public static final String MANIFEST_CLIENT_ENTRIES_KEY = "Fabric-Loom-Client-Only-Entries";
++	public static final String MANIFEST_NAMESPACE_KEY = "Ornithe-Mapping-Namespace";
++	public static final String MANIFEST_SPLIT_ENV_KEY = "Ornithe-Loom-Split-Environment";
++	public static final String MANIFEST_CLIENT_ENTRIES_KEY = "Ornithe-Loom-Client-Only-Entries";
+ 	public static final Attributes.Name MANIFEST_SPLIT_ENV_NAME = new Attributes.Name(MANIFEST_SPLIT_ENV_KEY);
+ 	public static final Attributes.Name MANIFEST_CLIENT_ENTRIES_NAME = new Attributes.Name(MANIFEST_CLIENT_ENTRIES_KEY);
+ 
 diff --git a/src/main/java/net/fabricmc/loom/task/RemapJarTask.java b/src/main/java/net/fabricmc/loom/task/RemapJarTask.java
 index 5fc7a01f24dcd788c7feac507c3b3f5f984c8a26..3b10647a94cd8e78b74a7e850ffe0455b7db1196 100644
 --- a/src/main/java/net/fabricmc/loom/task/RemapJarTask.java

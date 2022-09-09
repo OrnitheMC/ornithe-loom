@@ -1139,7 +1139,7 @@ index 386aab8a18dd8d4546939a6cf857d3a5de6cada9..f2113124247195181c914c3fc360ceb2
  
  		this.messages = project.getObjects().mapProperty(String.class, String.class);
 diff --git a/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java b/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
-index 053d8ec54e54d760ef03e57ddd818f3718f292b3..68648e976b778aafc1a2a47d3836047159f7274d 100644
+index c14d83b54cd1d055b3fc4370da6ccb1d9ad68301..689fdedf5cec4654fd93a7b848fc0bf59b946adc 100644
 --- a/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
 +++ b/src/main/java/net/fabricmc/loom/task/AbstractRemapJarTask.java
 @@ -95,7 +95,7 @@ public abstract class AbstractRemapJarTask extends Jar {
