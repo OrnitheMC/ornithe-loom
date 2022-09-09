@@ -203,6 +203,28 @@ index 22ce5a3cadb2c63f3a6af65743070b5989bb8b2b..aa1422e0387e617d58521d130aa4833b
  
  			if (bytes == null) {
  				return null;
+diff --git a/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerFile.java b/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerFile.java
+index 72c39b417441a0fbb590cb19c30c0911a2737333..025a7d0d6a5039f1a1c5f9e11839a85a7c8a5f85 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerFile.java
++++ b/src/main/java/net/fabricmc/loom/configuration/accesswidener/AccessWidenerFile.java
+@@ -48,7 +48,7 @@ public record AccessWidenerFile(
+ 		byte[] modJsonBytes;
+ 
+ 		try {
+-			modJsonBytes = ZipUtils.unpackNullable(modJarPath, "fabric.mod.json");
++			modJsonBytes = ZipUtils.unpackNullable(modJarPath, "ornithe.mod.json");
+ 		} catch (IOException e) {
+ 			throw new UncheckedIOException("Failed to read access-widener file from: " + modJarPath.toAbsolutePath(), e);
+ 		}
+@@ -71,7 +71,7 @@ public record AccessWidenerFile(
+ 		try {
+ 			content = ZipUtils.unpack(modJarPath, awPath);
+ 		} catch (IOException e) {
+-			throw new UncheckedIOException("Could not find access widener file (%s) defined in the fabric.mod.json file of %s".formatted(awPath, modJarPath.toAbsolutePath()), e);
++			throw new UncheckedIOException("Could not find access widener file (%s) defined in the ornithe.mod.json file of %s".formatted(awPath, modJarPath.toAbsolutePath()), e);
+ 		}
+ 
+ 		return new AccessWidenerFile(
 diff --git a/src/main/java/net/fabricmc/loom/configuration/ide/RunConfig.java b/src/main/java/net/fabricmc/loom/configuration/ide/RunConfig.java
 index 379c421005b90a7e4793451a60edf69368d5e1be..0589ce91e5dd91849d2492d0bc9c987d5fc354fe 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/ide/RunConfig.java
@@ -498,6 +520,21 @@ index 31298d953d72849b38f9a41b3f5bbbb565a81397..1b40fd2ac1f2b865b8a0d9ad1f4d4c67
  		}
  	}
  }
+diff --git a/src/main/java/net/fabricmc/loom/util/SidedClassVisitor.java b/src/main/java/net/fabricmc/loom/util/SidedClassVisitor.java
+index 5d2f7c6a7472b562abc0756e074a8b1e5bc23112..8dcff18d74bf4017f1971ccda20ea641b5f332c8 100644
+--- a/src/main/java/net/fabricmc/loom/util/SidedClassVisitor.java
++++ b/src/main/java/net/fabricmc/loom/util/SidedClassVisitor.java
+@@ -38,8 +38,8 @@ public final class SidedClassVisitor extends ClassVisitor {
+ 	public static final TinyRemapper.ApplyVisitorProvider CLIENT = (cls, next) -> new SidedClassVisitor("client", next);
+ 	public static final TinyRemapper.ApplyVisitorProvider SERVER = (cls, next) -> new SidedClassVisitor("server", next);
+ 
+-	private static final String ENVIRONMENT_DESCRIPTOR = "Lnet/fabricmc/api/Environment;";
+-	private static final String SIDE_DESCRIPTOR = "Lnet/fabricmc/api/EnvType;";
++	private static final String ENVIRONMENT_DESCRIPTOR = "Lnet/ornithemc/api/Environment;";
++	private static final String SIDE_DESCRIPTOR = "Lnet/ornithemc/api/EnvType;";
+ 
+ 	private final String side;
+ 	private boolean hasExisting = false;
 diff --git a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java b/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
 index 4c069aea7852903f862a87b4da5d78b8237e7a46..4d4a06ac1ddd61773ed5580491df09bec0780995 100644
 --- a/src/main/java/net/fabricmc/loom/util/SourceRemapper.java
