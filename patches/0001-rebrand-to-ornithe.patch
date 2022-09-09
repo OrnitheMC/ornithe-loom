@@ -18,7 +18,7 @@ index 804f486b753249b41cc33e7b1d48260c73a91391..3f0ecaf618e34fdf65b2b985d86cdfb3
  			} else {
  				project.getLogger().lifecycle("Loom environment validation disabled. Please re-enable before reporting any issues.");
 diff --git a/build.gradle b/build.gradle
-index d8e601509b71f224347c502931e63106c57491a5..c960945d2fb6f6452cad5864f509eb18fcc95a8a 100644
+index d8e601509b71f224347c502931e63106c57491a5..a777943f8740c2e09ffb6610e9cb2fe39e9b80c8 100644
 --- a/build.gradle
 +++ b/build.gradle
 @@ -28,7 +28,7 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
@@ -72,29 +72,43 @@ index d8e601509b71f224347c502931e63106c57491a5..c960945d2fb6f6452cad5864f509eb18
  	}
  }
  
-@@ -226,8 +230,8 @@ publishing {
+@@ -214,36 +218,6 @@ publishing {
  
- 		// Manually crate the plugin marker for snapshot versions
- 		snapshotPlugin(MavenPublication) { publication ->
+ 			from components.java
+ 		}
+-
+-		// Also publish a snapshot so people can use the latest version if they wish
+-		snapshot(MavenPublication) { publication ->
+-			groupId project.group
+-			artifactId project.archivesBaseName
+-			version baseVersion + '-SNAPSHOT'
+-
+-			from components.java
+-		}
+-
+-		// Manually crate the plugin marker for snapshot versions
+-		snapshotPlugin(MavenPublication) { publication ->
 -			groupId 'fabric-loom'
 -			artifactId 'fabric-loom.gradle.plugin'
-+			groupId 'ornithe-loom'
-+			artifactId 'ornithe-loom.gradle.plugin'
- 			version baseVersion + '-SNAPSHOT'
- 
- 			pom.withXml({
-@@ -237,9 +241,9 @@ publishing {
- 				Node dependencies = root.appendChild(document.createElement('dependencies'))
- 				Node dependency = dependencies.appendChild(document.createElement('dependency'))
- 				Node groupId = dependency.appendChild(document.createElement('groupId'))
+-			version baseVersion + '-SNAPSHOT'
+-
+-			pom.withXml({
+-				// Based off org.gradle.plugin.devel.plugins.MavenPluginPublishPlugin
+-				Element root = asElement()
+-				Document document = root.getOwnerDocument()
+-				Node dependencies = root.appendChild(document.createElement('dependencies'))
+-				Node dependency = dependencies.appendChild(document.createElement('dependency'))
+-				Node groupId = dependency.appendChild(document.createElement('groupId'))
 -				groupId.setTextContent('net.fabricmc')
-+				groupId.setTextContent('net.ornithemc')
- 				Node artifactId = dependency.appendChild(document.createElement('artifactId'))
+-				Node artifactId = dependency.appendChild(document.createElement('artifactId'))
 -				artifactId.setTextContent('fabric-loom')
-+				artifactId.setTextContent('ornithe-loom')
- 				Node version = dependency.appendChild(document.createElement('version'))
- 				version.setTextContent(baseVersion + '-SNAPSHOT')
- 			})
+-				Node version = dependency.appendChild(document.createElement('version'))
+-				version.setTextContent(baseVersion + '-SNAPSHOT')
+-			})
+-		}
+ 	}
+ 	repositories {
+ 		maven {
 diff --git a/checkstyle.xml b/checkstyle.xml
 index e8844859b78e491d8cde25792e655e11c13f162f..c42227a9ccac895a53b9aa625be8c558156ba8fb 100644
 --- a/checkstyle.xml
