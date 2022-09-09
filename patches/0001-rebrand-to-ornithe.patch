@@ -242,6 +242,19 @@ index 033211390944bb090942ed7d8f167bacb244e158..51cb5189c3a90ea93041455d395dd714
  
  			if (jsonObject == null) {
  				return Collections.emptyList();
+diff --git a/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java b/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
+index 3f463919bddc185f2567ac00f5a3df888ed3f148..d71cb2063ebea0b034afa394bfbb35046b59085b 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
++++ b/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
+@@ -58,7 +58,7 @@ public class AccessWidenerUtils {
+ 	}
+ 
+ 	public static AccessWidenerData readAccessWidenerData(Path inputJar) throws IOException {
+-		byte[] modJsonBytes = ZipUtils.unpack(inputJar, "fabric.mod.json");
++		byte[] modJsonBytes = ZipUtils.unpack(inputJar, "ornithe.mod.json");
+ 		JsonObject jsonObject = LoomGradlePlugin.GSON.fromJson(new String(modJsonBytes, StandardCharsets.UTF_8), JsonObject.class);
+ 
+ 		if (!jsonObject.has("accessWidener")) {
 diff --git a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java b/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java
 index b06447fe6660f3664a2febcdde0897840e15df33..1fc7a69e5fdd571cced32985bf6eb58da950585c 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/processors/ModJavadocProcessor.java

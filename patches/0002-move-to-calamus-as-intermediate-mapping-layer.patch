@@ -323,7 +323,7 @@ index 51cb5189c3a90ea93041455d395dd7146c18cab0..dad50cdc18d217ead4ae153aa3d38fd7
  	}
  
 diff --git a/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java b/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
-index 3f463919bddc185f2567ac00f5a3df888ed3f148..39fb4d61df5fb74ce0cb916cd686566d66f1fef5 100644
+index d71cb2063ebea0b034afa394bfbb35046b59085b..11beb36bb358d16c40db8951326c4a07f2abd4f0 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/mods/AccessWidenerUtils.java
 @@ -40,7 +40,7 @@ import net.fabricmc.loom.util.ZipUtils;
