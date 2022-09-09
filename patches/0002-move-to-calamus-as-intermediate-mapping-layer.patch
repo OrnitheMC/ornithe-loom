@@ -38,7 +38,7 @@ index 72546cdb6255dbbd7dae478e6b0dd50616d7f9f7..045e27f9a9b4ca0ab733d5620c9a792b
  		};
  	}
 diff --git a/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java b/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
-index 693f1d55b51965416208a8a27e07fdc391f0741f..abcdb7f377f9266b0dca504005fc043bc145babc 100644
+index a5b8be318cf5edae96eb4ab0e37792b9daf82e8b..7c1434651c975c53b647972096fa206bf0f2bbfc 100644
 --- a/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
 +++ b/src/main/java/net/fabricmc/loom/api/LoomGradleExtensionAPI.java
 @@ -178,9 +178,9 @@ public interface LoomGradleExtensionAPI {
@@ -1243,7 +1243,7 @@ index 8077cd35bd12af577d2bea517b6192008d3b7f4d..ffa0e2c7c3f838fe03c89930cba08e23
  		}
  
 diff --git a/src/main/java/net/fabricmc/loom/util/Constants.java b/src/main/java/net/fabricmc/loom/util/Constants.java
-index de21aa9f24bf2459ba397baa78ecb2289bef5ba8..202a49113b8e4282f2c675de46b5342ea82b4bdc 100644
+index 92b948fb6e5f18e625ffcfc224177a3b358ffb6b..40426f5e770925f7c20afcdd765b7181363267f7 100644
 --- a/src/main/java/net/fabricmc/loom/util/Constants.java
 +++ b/src/main/java/net/fabricmc/loom/util/Constants.java
 @@ -107,8 +107,8 @@ public class Constants {
