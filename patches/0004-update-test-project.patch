@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Space Walker <spacedoesrs@gmail.com>
+Date: Fri, 9 Sep 2022 16:08:13 +0200
+Subject: [PATCH] update test project
+
+
+diff --git a/bootstrap/test-project/build.gradle b/bootstrap/test-project/build.gradle
+index 561915428a80131439ea9e1d9f12804c491d399a..af811aadc88f4b81c535f3a46dca1ae612043480 100644
+--- a/bootstrap/test-project/build.gradle
++++ b/bootstrap/test-project/build.gradle
+@@ -1,8 +1,8 @@
+ plugins {
+-	id 'fabric-loom' version '0.13.local'
++	id 'ornithe-loom' version '1.0.local'
+ }
+ 
+ dependencies {
+-	minecraft "com.mojang:minecraft:1.16.5"
+-	mappings loom.officialMojangMappings()
++	minecraft "com.mojang:minecraft:1.7.2"
++	mappings "net.ornithemc:feather:1.7.2+build.1"
+ }
+\ No newline at end of file
+diff --git a/bootstrap/test-project/settings.gradle b/bootstrap/test-project/settings.gradle
+index 37a1b9e037a96a20cb92152140e1edf44328f357..d7eea10fa8929bccb28105e05847f0aae5639eaf 100644
+--- a/bootstrap/test-project/settings.gradle
++++ b/bootstrap/test-project/settings.gradle
+@@ -1,10 +1,14 @@
+ pluginManagement {
+     repositories {
++        maven {
++            name = 'Ornithe'
++            url = 'https://maven.ornithemc.net/releases'
++        }
+         maven {
+             name = 'Fabric'
+             url = 'https://maven.fabricmc.net/'
+         }
+         gradlePluginPortal()
+-		mavenLocal()
++        mavenLocal()
+     }
+ }
