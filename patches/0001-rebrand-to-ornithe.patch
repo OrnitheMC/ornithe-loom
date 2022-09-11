@@ -46,7 +46,7 @@ index d8e601509b71f224347c502931e63106c57491a5..a777943f8740c2e09ffb6610e9cb2fe3
  
  	// game handling utils
 -	implementation ('net.fabricmc:stitch:0.6.2') {
-+	implementation ('net.ornithemc:stitch:0.7.6') {
++	implementation ('net.ornithemc:stitch:0.7.7') {
  		exclude module: 'enigma'
  	}
  
