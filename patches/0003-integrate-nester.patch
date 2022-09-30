@@ -34,6 +34,19 @@ index dd871134dd0cd9f83b6bed75f02930de216e99a4..06aae73005c27124014d53e0ac135a75
 -	public abstract void provide(Path tinyMappings) throws IOException;
 +	public abstract void provide(Path tinyMappings, Path nestMappings) throws IOException;
  }
+diff --git a/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java b/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
+index 06816f3e2eb3da9255f7047ee59b2d680897bf2b..6589ec6f1519c877f59150f54ac8493b1f3da958 100644
+--- a/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
++++ b/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
+@@ -192,6 +192,8 @@ public final class CompileConfiguration {
+ 		extension.setMappingsProvider(mappingsProvider);
+ 		mappingsProvider.applyToProject(project, mappingsDep);
+ 
++		minecraftProvider.patchJars();
++
+ 		// Provide the remapped mc jars
+ 		final CalamusMinecraftProvider<?> calamusMinecraftProvider = jarConfiguration.getCalamusMinecraftProviderBiFunction().apply(project, minecraftProvider);
+ 		NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.getNamedMinecraftProviderBiFunction().apply(project, minecraftProvider);
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
 index d5f5e431a5b194326e3a4aa74a00d6e087381b4b..0b6c1c0f7876df3d6e55669da00af0a3c5106496 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
@@ -244,7 +257,7 @@ index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..45d10d3ee14d55227d111f978d774a84
  	}
  
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-index 13189391dce290b89dec5039bb8aea71035d6fda..d5e72eeead9e9711703fd96a938833fca9e6ff10 100644
+index 13189391dce290b89dec5039bb8aea71035d6fda..0edebe0030283c2fae8faa513c45092cadecebfb 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 @@ -31,21 +31,26 @@ import java.nio.file.Path;
@@ -284,15 +297,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..d5e72eeead9e9711703fd96a938833fc
  	// The extracted server jar from the boostrap, only exists in >=21w39a
  	private File minecraftExtractedServerJar;
  	@Nullable
-@@ -92,6 +99,7 @@ public abstract class MinecraftProvider {
- 		}
- 
- 		downloadJars();
-+		patchJars();
- 
- 		if (provideServer()) {
- 			serverBundleMetadata = BundleMetadata.fromJar(minecraftServerJar.toPath());
-@@ -110,10 +118,12 @@ public abstract class MinecraftProvider {
+@@ -110,10 +117,12 @@ public abstract class MinecraftProvider {
  
  		if (provideClient()) {
  			minecraftClientJar = file("minecraft-client.jar");
@@ -305,11 +310,11 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..d5e72eeead9e9711703fd96a938833fc
  			minecraftExtractedServerJar = file("minecraft-extracted_server.jar");
  		}
  	}
-@@ -201,6 +211,27 @@ public abstract class MinecraftProvider {
+@@ -201,6 +210,27 @@ public abstract class MinecraftProvider {
  		}
  	}
  
-+	private void patchJars() throws IOException {
++	public void patchJars() throws IOException {
 +		LoomGradleExtension extension = LoomGradleExtension.get(project);
 +		MappingsProviderImpl mappingsProvider = extension.getMappingsProvider();
 +		Nests nests = mappingsProvider.getNests();
@@ -333,7 +338,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..d5e72eeead9e9711703fd96a938833fc
  	protected final void extractBundledServerJar() throws IOException {
  		Preconditions.checkArgument(provideServer(), "Not configured to provide server jar");
  		Objects.requireNonNull(getServerBundleMetadata(), "Cannot bundled mc jar from none bundled server jar");
-@@ -211,7 +242,7 @@ public abstract class MinecraftProvider {
+@@ -211,7 +241,7 @@ public abstract class MinecraftProvider {
  			throw new UnsupportedOperationException("Expected only 1 version in META-INF/versions.list, but got %d".formatted(getServerBundleMetadata().versions().size()));
  		}
  
@@ -342,7 +347,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..d5e72eeead9e9711703fd96a938833fc
  	}
  
  	public File workingDir() {
-@@ -234,7 +265,7 @@ public abstract class MinecraftProvider {
+@@ -234,7 +264,7 @@ public abstract class MinecraftProvider {
  
  	public File getMinecraftClientJar() {
  		Preconditions.checkArgument(provideClient(), "Not configured to provide client jar");
@@ -351,7 +356,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..d5e72eeead9e9711703fd96a938833fc
  	}
  
  	// May be null on older versions
-@@ -247,7 +278,7 @@ public abstract class MinecraftProvider {
+@@ -247,7 +277,7 @@ public abstract class MinecraftProvider {
  	// This may be the server bundler jar on newer versions prob not what you want.
  	public File getMinecraftServerJar() {
  		Preconditions.checkArgument(provideServer(), "Not configured to provide server jar");
