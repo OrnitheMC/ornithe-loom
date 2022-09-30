@@ -34,19 +34,6 @@ index dd871134dd0cd9f83b6bed75f02930de216e99a4..06aae73005c27124014d53e0ac135a75
 -	public abstract void provide(Path tinyMappings) throws IOException;
 +	public abstract void provide(Path tinyMappings, Path nestMappings) throws IOException;
  }
-diff --git a/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java b/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
-index 06816f3e2eb3da9255f7047ee59b2d680897bf2b..6589ec6f1519c877f59150f54ac8493b1f3da958 100644
---- a/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
-+++ b/src/main/java/net/fabricmc/loom/configuration/CompileConfiguration.java
-@@ -192,6 +192,8 @@ public final class CompileConfiguration {
- 		extension.setMappingsProvider(mappingsProvider);
- 		mappingsProvider.applyToProject(project, mappingsDep);
- 
-+		minecraftProvider.patchJars();
-+
- 		// Provide the remapped mc jars
- 		final CalamusMinecraftProvider<?> calamusMinecraftProvider = jarConfiguration.getCalamusMinecraftProviderBiFunction().apply(project, minecraftProvider);
- 		NamedMinecraftProvider<?> namedMinecraftProvider = jarConfiguration.getNamedMinecraftProviderBiFunction().apply(project, minecraftProvider);
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
 index d5f5e431a5b194326e3a4aa74a00d6e087381b4b..0b6c1c0f7876df3d6e55669da00af0a3c5106496 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/CalamusMappingsProvider.java
@@ -151,66 +138,20 @@ index fa46c0f54da5a24111515e0b09be23a2d6a93349..ba31b3d4611545f3986195cf7ad9025f
 +	}
  }
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
-index cd451415af326969b7b09ac73aa2e70070263fbe..14224ffb8cf37553273ebf6aa9faf6ac73b16271 100644
+index cd451415af326969b7b09ac73aa2e70070263fbe..7c0ac00bb609cf4a0769f05ee9c44c216032dd6b 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProvider.java
-@@ -31,4 +31,6 @@ public interface MappingsProvider {
+@@ -31,4 +31,5 @@ public interface MappingsProvider {
  	Path mappingsWorkingDir();
  
  	File calamusTinyFile();
 +
-+	File calamusNestFile();
  }
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
-index f5ae9be6944b9d11bbab30f084ab6880971fdb2b..977b948a21f63eebc3db4eaf0f6f816aac204ea0 100644
+index f5ae9be6944b9d11bbab30f084ab6880971fdb2b..2a5b3e912bbc2c12c4f9f865c47ccfded6272be2 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/MappingsProviderImpl.java
-@@ -66,10 +66,14 @@ import net.fabricmc.mappingio.tree.MemoryMappingTree;
- import net.fabricmc.stitch.Command;
- import net.fabricmc.stitch.commands.CommandProposeFieldNames;
- 
-+import net.ornithemc.nester.mapping.Nests;
-+
- public class MappingsProviderImpl implements MappingsProvider, SharedService {
- 	private static final Logger LOGGER = LoggerFactory.getLogger(MappingsProviderImpl.class);
- 
- 	private Supplier<MemoryMappingTree> mappingTree;
-+	private Supplier<Nests> nests;
-+
- 	public final String mappingsIdentifier;
- 
- 	private final Path mappingsWorkingDir;
-@@ -109,6 +113,10 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
- 		return Objects.requireNonNull(mappingTree, "Cannot get mappings before they have been read").get();
- 	}
- 
-+	public Nests getNests() {
-+		return Objects.requireNonNull(nests, "Cannot get nests before they have been read").get();
-+	}
-+
- 	private static MappingsProviderImpl create(DependencyInfo dependency, MinecraftProvider minecraftProvider, Supplier<IntermediateMappingsService> calamusService) {
- 		final String version = dependency.getResolvedVersion();
- 		final Path inputJar = dependency.resolveFile().orElseThrow(() -> new RuntimeException("Could not resolve mappings: " + dependency)).toPath();
-@@ -155,6 +163,7 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
- 		}
- 
- 		mappingTree = Suppliers.memoize(this::readMappings);
-+		nests = Suppliers.memoize(this::readNests);
- 	}
- 
- 	public void applyToProject(Project project, DependencyInfo dependency) {
-@@ -217,6 +226,10 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
- 		}
- 	}
- 
-+	private Nests readNests() {
-+		return calamusService.get().getNests();
-+	}
-+
- 	private static boolean areMappingsV2(Path path) throws IOException {
- 		try (BufferedReader reader = Files.newBufferedReader(path)) {
- 			return MappingReader.detectFormat(reader) == MappingFormat.TINY_2;
-@@ -233,6 +246,20 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
+@@ -233,6 +233,20 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
  		Files.copy(jar.getPath("mappings/mappings.tiny"), extractTo, StandardCopyOption.REPLACE_EXISTING);
  	}
  
@@ -231,18 +172,6 @@ index f5ae9be6944b9d11bbab30f084ab6880971fdb2b..977b948a21f63eebc3db4eaf0f6f816a
  	private void extractExtras(FileSystem jar) throws IOException {
  		extractUnpickDefinitions(jar);
  		extractSignatureFixes(jar);
-@@ -336,6 +363,11 @@ public class MappingsProviderImpl implements MappingsProvider, SharedService {
- 		return calamusService.get().getCalamusTiny().toFile();
- 	}
- 
-+	@Override
-+	public File calamusNestFile() {
-+		return calamusService.get().getCalamusNest().toFile();
-+	}
-+
- 	private static String createMappingsIdentifier(String mappingsName, String version, String classifier, String minecraftVersion) {
- 		//          mappingsName      . mcVersion . version        classifier
- 		// Example: net.fabricmc.yarn . 1_16_5    . 1.16.5+build.5 -v2
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
 index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..45d10d3ee14d55227d111f978d774a848dfbf674 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/mappings/NoOpIntermediateMappingsProvider.java
@@ -257,7 +186,7 @@ index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..45d10d3ee14d55227d111f978d774a84
  	}
  
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-index 13189391dce290b89dec5039bb8aea71035d6fda..0edebe0030283c2fae8faa513c45092cadecebfb 100644
+index 13189391dce290b89dec5039bb8aea71035d6fda..8cc5a85ba3b0c2e167e998ff70169d2af8c14098 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 @@ -31,21 +31,26 @@ import java.nio.file.Path;
@@ -276,7 +205,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..0edebe0030283c2fae8faa513c45092c
  import net.fabricmc.loom.LoomGradlePlugin;
  import net.fabricmc.loom.configuration.DependencyInfo;
  import net.fabricmc.loom.configuration.providers.BundleMetadata;
-+import net.fabricmc.loom.configuration.providers.mappings.MappingsProviderImpl;
++import net.fabricmc.loom.configuration.providers.mappings.IntermediateMappingsService;
  import net.fabricmc.loom.util.Constants;
  import net.fabricmc.loom.util.MirrorUtil;
  import net.fabricmc.loom.util.download.DownloadBuilder;
@@ -297,7 +226,15 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..0edebe0030283c2fae8faa513c45092c
  	// The extracted server jar from the boostrap, only exists in >=21w39a
  	private File minecraftExtractedServerJar;
  	@Nullable
-@@ -110,10 +117,12 @@ public abstract class MinecraftProvider {
+@@ -92,6 +99,7 @@ public abstract class MinecraftProvider {
+ 		}
+ 
+ 		downloadJars();
++		patchJars();
+ 
+ 		if (provideServer()) {
+ 			serverBundleMetadata = BundleMetadata.fromJar(minecraftServerJar.toPath());
+@@ -110,10 +118,12 @@ public abstract class MinecraftProvider {
  
  		if (provideClient()) {
  			minecraftClientJar = file("minecraft-client.jar");
@@ -310,14 +247,13 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..0edebe0030283c2fae8faa513c45092c
  			minecraftExtractedServerJar = file("minecraft-extracted_server.jar");
  		}
  	}
-@@ -201,6 +210,27 @@ public abstract class MinecraftProvider {
+@@ -201,6 +211,26 @@ public abstract class MinecraftProvider {
  		}
  	}
  
-+	public void patchJars() throws IOException {
-+		LoomGradleExtension extension = LoomGradleExtension.get(project);
-+		MappingsProviderImpl mappingsProvider = extension.getMappingsProvider();
-+		Nests nests = mappingsProvider.getNests();
++	private void patchJars() throws IOException {
++		IntermediateMappingsService calamusService = IntermediateMappingsService.getInstance(project, this);
++		Nests nests = calamusService.getNests();
 +
 +		if (provideClient()) {
 +			if (nests.get().isEmpty()) {
