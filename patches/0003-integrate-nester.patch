@@ -186,7 +186,7 @@ index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..45d10d3ee14d55227d111f978d774a84
  	}
  
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-index 13189391dce290b89dec5039bb8aea71035d6fda..8cc5a85ba3b0c2e167e998ff70169d2af8c14098 100644
+index 13189391dce290b89dec5039bb8aea71035d6fda..5aacd153a9f94590e9f991053b6f506a660260c7 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 @@ -31,21 +31,26 @@ import java.nio.file.Path;
@@ -247,11 +247,15 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..8cc5a85ba3b0c2e167e998ff70169d2a
  			minecraftExtractedServerJar = file("minecraft-extracted_server.jar");
  		}
  	}
-@@ -201,6 +211,26 @@ public abstract class MinecraftProvider {
+@@ -201,6 +211,30 @@ public abstract class MinecraftProvider {
  		}
  	}
  
 +	private void patchJars() throws IOException {
++		if (patchedMinecraftClientJar.exists() && patchedMinecraftServerJar.exists() && !refreshDeps()) {
++			return;
++		}
++
 +		IntermediateMappingsService calamusService = IntermediateMappingsService.getInstance(project, this);
 +		Nests nests = calamusService.getNests();
 +
@@ -274,7 +278,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..8cc5a85ba3b0c2e167e998ff70169d2a
  	protected final void extractBundledServerJar() throws IOException {
  		Preconditions.checkArgument(provideServer(), "Not configured to provide server jar");
  		Objects.requireNonNull(getServerBundleMetadata(), "Cannot bundled mc jar from none bundled server jar");
-@@ -211,7 +241,7 @@ public abstract class MinecraftProvider {
+@@ -211,7 +245,7 @@ public abstract class MinecraftProvider {
  			throw new UnsupportedOperationException("Expected only 1 version in META-INF/versions.list, but got %d".formatted(getServerBundleMetadata().versions().size()));
  		}
  
@@ -283,7 +287,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..8cc5a85ba3b0c2e167e998ff70169d2a
  	}
  
  	public File workingDir() {
-@@ -234,7 +264,7 @@ public abstract class MinecraftProvider {
+@@ -234,7 +268,7 @@ public abstract class MinecraftProvider {
  
  	public File getMinecraftClientJar() {
  		Preconditions.checkArgument(provideClient(), "Not configured to provide client jar");
@@ -292,7 +296,7 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..8cc5a85ba3b0c2e167e998ff70169d2a
  	}
  
  	// May be null on older versions
-@@ -247,7 +277,7 @@ public abstract class MinecraftProvider {
+@@ -247,7 +281,7 @@ public abstract class MinecraftProvider {
  	// This may be the server bundler jar on newer versions prob not what you want.
  	public File getMinecraftServerJar() {
  		Preconditions.checkArgument(provideServer(), "Not configured to provide server jar");
