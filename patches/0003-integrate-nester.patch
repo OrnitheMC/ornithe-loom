@@ -5,7 +5,7 @@ Subject: [PATCH] integrate nester
 
 
 diff --git a/build.gradle b/build.gradle
-index 8ae381b8d82ae99ae76971128f4a53f726bad7b2..a4b8055f19082279c4fe9dd47cac8f13b67f7a75 100644
+index 8ae381b8d82ae99ae76971128f4a53f726bad7b2..5686d0cc5673685f983e76c6af874d0aaf3bc2f0 100644
 --- a/build.gradle
 +++ b/build.gradle
 @@ -103,6 +103,9 @@ dependencies {
@@ -13,7 +13,7 @@ index 8ae381b8d82ae99ae76971128f4a53f726bad7b2..a4b8055f19082279c4fe9dd47cac8f13
  	implementation ('net.fabricmc:mercury:0.2.6')
  
 +	// nested class fixing
-+	implementation 'net.ornithemc:nester:0.2.5'
++	implementation 'net.ornithemc:nester:0.2.6'
 +
  	// Kotlin
  	implementation('org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.4.2') {
