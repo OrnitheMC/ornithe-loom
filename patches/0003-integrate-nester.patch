@@ -5,7 +5,7 @@ Subject: [PATCH] integrate nester
 
 
 diff --git a/build.gradle b/build.gradle
-index 8ae381b8d82ae99ae76971128f4a53f726bad7b2..652459aa2ef00cd12eb8688adfb78b76d88eda0e 100644
+index 8ae381b8d82ae99ae76971128f4a53f726bad7b2..90a20a6b170adb14254b6ffdfc1510e22161e4b5 100644
 --- a/build.gradle
 +++ b/build.gradle
 @@ -103,6 +103,9 @@ dependencies {
@@ -13,7 +13,7 @@ index 8ae381b8d82ae99ae76971128f4a53f726bad7b2..652459aa2ef00cd12eb8688adfb78b76
  	implementation ('net.fabricmc:mercury:0.2.6')
  
 +	// nested class fixing
-+	implementation 'net.ornithemc:nester:0.3.1'
++	implementation 'net.ornithemc:nester:0.4.1'
 +
  	// Kotlin
  	implementation('org.jetbrains.kotlinx:kotlinx-metadata-jvm:0.4.2') {
@@ -186,7 +186,7 @@ index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..45d10d3ee14d55227d111f978d774a84
  	}
  
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-index 13189391dce290b89dec5039bb8aea71035d6fda..5aacd153a9f94590e9f991053b6f506a660260c7 100644
+index 13189391dce290b89dec5039bb8aea71035d6fda..c3fb6656a74794706b25e86757ec0f84293f3c46 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 +++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
 @@ -31,21 +31,26 @@ import java.nio.file.Path;
@@ -260,14 +260,14 @@ index 13189391dce290b89dec5039bb8aea71035d6fda..5aacd153a9f94590e9f991053b6f506a
 +		Nests nests = calamusService.getNests();
 +
 +		if (provideClient()) {
-+			if (nests.get().isEmpty()) {
++			if (nests.isEmpty()) {
 +				Files.copy(minecraftClientJar, patchedMinecraftClientJar);
 +			} else {
 +				Nester.fixJar(minecraftClientJar.toPath(), patchedMinecraftClientJar.toPath(), nests);
 +			}
 +		}
 +		if (provideServer()) {
-+			if (nests.get().isEmpty()) {
++			if (nests.isEmpty()) {
 +				Files.copy(minecraftServerJar, patchedMinecraftServerJar);
 +			} else {
 +				Nester.fixJar(minecraftServerJar.toPath(), patchedMinecraftServerJar.toPath(), nests);
