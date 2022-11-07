@@ -244,24 +244,6 @@ index 6e21742f2ad6f865152dcf24e74515458d6a5b1d..55dba8a9fcb1ee683233731bca2ce911
  		Files.writeString(tinyMappings, HEADER, StandardCharsets.UTF_8);
  	}
  
-diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-index 13189391dce290b89dec5039bb8aea71035d6fda..240ea641fd3f62147911383351a5033ab5f31e91 100644
---- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-+++ b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/MinecraftProvider.java
-@@ -31,11 +31,12 @@ import java.nio.file.Path;
- import java.util.List;
- import java.util.Objects;
- 
--import com.google.common.base.Preconditions;
- import org.gradle.api.Project;
- import org.gradle.api.logging.Logger;
- import org.jetbrains.annotations.Nullable;
- 
-+import com.google.common.base.Preconditions;
-+
- import net.fabricmc.loom.LoomGradleExtension;
- import net.fabricmc.loom.LoomGradlePlugin;
- import net.fabricmc.loom.configuration.DependencyInfo;
 diff --git a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java b/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
 index eed9df341fb2d7bf3ae13503ef881abde2647864..1ed037e2586581958ab77d53d2ad5a92c328322b 100644
 --- a/src/main/java/net/fabricmc/loom/configuration/providers/minecraft/mapped/AbstractMappedMinecraftProvider.java
